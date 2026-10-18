@@ -19,14 +19,16 @@ export async function loadPredefinedLevel(difficulty, number) {
 
 /**
  * Generates a random level for a difficulty using a pool of web workers, each trying its own seeds; the first level
- * found wins. Returns { promise, cancel }. The promise resolves to { data, seed } and rejects with CANCELLED if
- * cancelled. onProgress(seedsTried) is called as seeds are discarded.
+ * found wins. With `seed` given, exactly that seed is generated (it either gives its level or an error).
+ * Returns { promise, cancel }. The promise resolves to { data, seed } and rejects with CANCELLED if cancelled.
+ * onProgress(seedsTried) is called as seeds are discarded. The level of a seed never depends on the machine.
  */
-export function generateRandomLevel(difficulty, { onProgress } = {}) {
-  const { workers: maxWorkers, attemptMs, timeLimit } = APP_CONFIG.generation;
-  const options = buildOptions(PRESETS.levels[difficulty], difficulty, { attempts: 1, attemptMs, timeLimit });
-  const count = Math.max(1, Math.min(maxWorkers, (navigator.hardwareConcurrency || 2) - 1));
-  const base = Math.floor(Math.random() * 1e9);
+export function generateRandomLevel(difficulty, { onProgress, seed = null } = {}) {
+  const { workers: maxWorkers } = APP_CONFIG.generation;
+  const options = buildOptions(PRESETS.levels[difficulty], difficulty, {}, PRESETS.generation);
+  const exact = seed !== null;
+  const count = exact ? 1 : Math.max(1, Math.min(maxWorkers, (navigator.hardwareConcurrency || 2) - 1));
+  const base = exact ? seed : Math.floor(Math.random() * 1e9);
   const pool = [];
   const tried = new Array(count).fill(0);
   let settled = false, finish;
@@ -47,7 +49,7 @@ export function generateRandomLevel(difficulty, { onProgress } = {}) {
       worker.onerror = fail;
       worker.onmessageerror = fail;
       pool.push(worker);
-      worker.postMessage({ options, seed: base + i, stride: count });
+      worker.postMessage({ options, seed: base + i, stride: count, exact });
     }
   });
   return { promise, cancel() { if (!settled) { stop(); finish.reject(CANCELLED); } } };

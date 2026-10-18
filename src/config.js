@@ -63,9 +63,9 @@ export const APP_CONFIG = {
    */
   predefinedLevels: { 1: 5, 2: 5, 3: 5, 4: 5 },
   /**
-   * Random level generation. Seeds are tried in parallel in several web workers; a seed that takes longer than
-   * attemptMs is dropped (the slowest seeds can take minutes, a fresh one is usually quick). timeLimit caps each
-   * solver call, in seconds.
+   * Random level generation: seeds are tried in parallel in up to `workers` web workers. The effort limits that decide
+   * which seeds work live in the "generation" block of shared/presets.json (shared with the command line tools, so a
+   * seed gives the same level everywhere).
    */
-  generation: { workers: 4, attemptMs: 6000, timeLimit: 3 }
+  generation: { workers: 4 }
 };

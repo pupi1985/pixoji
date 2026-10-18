@@ -1,30 +1,38 @@
 /**
  * options.js - turns a preset (shared/presets.json) into the option object generateLevel() expects.
  * Kept apart from generator.js so the game's main thread can build options without loading the solver.
+ *
+ * Generation is DETERMINISTIC: the same seed + the same options always give the same level (or always none), on any
+ * machine. For that the effort limits are counted in solver "work" units, never in seconds:
+ *   seedWork      work one seed may use before it is given up (this is what keeps generation fast)
+ *   callWork      work one solver rating run may use; a run over it counts as "too hard", so clues are added back
+ *   nodeBudget    search budget for analysing a single clue
+ *   searchBudget  branching budget of the uniqueness check
+ * Change them in the "generation" block of presets.json; changing them changes which seeds give which level.
  */
-import { CELL_NAMES, LINE_NAMES, ALL_CELL_CODES, ALL_LINE_CODES, parseTypeList } from './clue-types.js';
+import { CELL_NAMES, LINE_NAMES, ALL_CELL_CODES, ALL_LINE_CODES, normalizeWeights, checkRange } from './clue-types.js';
+
+export const DEFAULT_GENERATION = { seedWork: 1000000, callWork: 500000, nodeBudget: 30000, searchBudget: 150 };
 
 /**
- * Turns one preset level into the option object generateLevel() expects.  `ov` may override any preset value
- * (the CLI does that): width, height, cellClues, lineClues (names or arrays), density ([a] or [a, b]), minDepth,
- * maxDepth, lineDensity, bombRatio, chains, maxChain, multipliers, maxAreaClue, redundant, attempts, timeLimit,
- * nodeBudget, searchBudget, attemptMs (wall-clock cap per attempt in ms, 0 = none).  Throws on unknown clue names.
+ * `ov` overrides preset values (the CLI does that): width, height, bombs, cellCluesDensity, lineCluesDensity, cellClues,
+ * lineClues, depth, chainClueMaxSize, areaClueMaxSize, redundant, seedWork, callWork, nodeBudget, searchBudget.
+ * cellClues / lineClues overrides are already normalised { code: [min, max] } maps.
  */
-export function buildOptions(p, level, ov = {}) {
-  const cellTypes = parseTypeList(ov.cellClues ?? p.cellClues, CELL_NAMES, ALL_CELL_CODES, 'cell');
-  const lineTypes = parseTypeList(ov.lineClues ?? p.lineClues, LINE_NAMES, ALL_LINE_CODES, 'line');
-  const W = ov.width ?? p.size[0], H = ov.height ?? p.size[1], scale = (W * H) / 64;
-  const explicit = ov.cellClues !== undefined && String(ov.cellClues).toLowerCase() !== 'all';
-  const scaled = (n, floor) => Math.max(floor, Math.round(n * scale));
-  const density = ov.density ?? p.density;
+export function buildOptions(p, level, ov = {}, generation = {}) {
+  const g = { ...DEFAULT_GENERATION, ...generation };
+  const range = (v, what) => checkRange(v, what);
   return {
-    W, H, level, cellTypes: new Set([1, 2, 3, 6].filter((t) => cellTypes.has(t))), lineTypes,
-    minDepth: ov.minDepth ?? p.minDepth, maxDepth: ov.maxDepth ?? p.maxDepth,
-    density: density.length === 1 ? [density[0], density[0]] : density,
-    lineDensity: ov.lineDensity ?? p.lineDensity, bombRatio: ov.bombRatio ?? p.bombRatio ?? 0.42,
-    chains: cellTypes.has(4) ? (ov.chains ?? scaled(p.chains, explicit ? 1 : 0)) : 0, maxChain: ov.maxChain ?? p.maxChain,
-    multipliers: cellTypes.has(5) ? (ov.multipliers ?? scaled(p.multipliers, explicit ? 1 : 0)) : 0,
-    redundant: !!(ov.redundant || p.redundant), maxAreaClue: ov.maxAreaClue ?? p.maxAreaClue ?? Infinity,
-    attempts: ov.attempts ?? 60, attemptMs: ov.attemptMs ?? 0, timeLimit: ov.timeLimit ?? 25, nodeBudget: ov.nodeBudget ?? 30000, searchBudget: ov.searchBudget ?? 150,
+    W: ov.width ?? p.size[0], H: ov.height ?? p.size[1], level,
+    bombs: range(ov.bombs ?? p.bombs, 'bombs'),
+    cellCluesDensity: range(ov.cellCluesDensity ?? p.cellCluesDensity, 'cellCluesDensity'),
+    lineCluesDensity: range(ov.lineCluesDensity ?? p.lineCluesDensity, 'lineCluesDensity'),
+    cellWeights: ov.cellClues ?? normalizeWeights(p.cellClues, CELL_NAMES, ALL_CELL_CODES, 'cell'),
+    lineWeights: ov.lineClues ?? normalizeWeights(p.lineClues, LINE_NAMES, ALL_LINE_CODES, 'line'),
+    depth: range(ov.depth ?? p.depth, 'depth'),
+    chainClueMaxSize: ov.chainClueMaxSize ?? p.chainClueMaxSize ?? 2, areaClueMaxSize: ov.areaClueMaxSize ?? p.areaClueMaxSize ?? Infinity,
+    redundant: !!(ov.redundant ?? p.redundant),
+    seedWork: ov.seedWork ?? g.seedWork, callWork: ov.callWork ?? g.callWork,
+    nodeBudget: ov.nodeBudget ?? g.nodeBudget, searchBudget: ov.searchBudget ?? g.searchBudget,
   };
 }

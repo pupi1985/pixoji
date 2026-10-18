@@ -15,9 +15,13 @@ function weightedOrder(rng, weights) { // random permutation biased by weights
   return Object.entries(weights).map(([t, w]) => [Number(t), -Math.log(rng() || 1e-9) / w]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
 }
 
-function makeStructure(rng, o) {
+/**
+ * Random bombs plus the structural clue cells: chains (clue 4, always all-bomb or all-safe, never touching another
+ * chain) holding about `chainCells` cells in total, and `multCells` multiplier cells (clue 5).
+ */
+function makeStructure(rng, o, ratio, chainCells, multCells) {
   const { W, H } = o;
-  const B = Array.from({ length: H }, () => Array.from({ length: W }, () => (rng() < o.bombRatio ? 1 : 0)));
+  const B = Array.from({ length: H }, () => Array.from({ length: W }, () => (rng() < ratio ? 1 : 0)));
   const C = Array.from({ length: H }, () => Array(W).fill(0));
   const chainOf = Array.from({ length: H }, () => Array(W).fill(-1));
   const inb = (r, c) => r >= 0 && r < H && c >= 0 && c < W;
@@ -28,11 +32,14 @@ function makeStructure(rng, o) {
     }
     return false;
   };
-  for (let k = 0; k < o.chains; k++) {
+  let remaining = chainCells;
+  for (let k = 0; remaining >= 2 && k < 16; k++) {
     for (let tries = 0; tries < 40; tries++) {
       const r = randInt(rng, H), c = randInt(rng, W);
       if (C[r][c] || nearOther(r, c, k)) continue;
-      const target = 2 + randInt(rng, Math.max(1, o.maxChain - 1));
+      let target = Math.min(remaining, 2 + randInt(rng, Math.max(1, o.chainClueMaxSize - 1)));
+      if (remaining - target === 1) target = remaining <= o.chainClueMaxSize ? remaining : target - 1;   // never leave a lone cell over
+      target = Math.max(2, target);
       const cells = [[r, c]]; chainOf[r][c] = k; C[r][c] = CELL.CHAIN;
       for (let guard = 0; cells.length < target && guard < 60; guard++) {
         const [br, bc] = cells[randInt(rng, cells.length)], [dr, dc] = DIRS4[randInt(rng, 4)];
@@ -41,12 +48,13 @@ function makeStructure(rng, o) {
         chainOf[nr][nc] = k; C[nr][nc] = CELL.CHAIN; cells.push([nr, nc]);
       }
       if (cells.length < 2) { cells.forEach(([a, b]) => { C[a][b] = 0; chainOf[a][b] = -1; }); continue; }
-      const state = rng() < o.bombRatio ? 1 : 0;
+      const state = rng() < ratio ? 1 : 0;
       cells.forEach(([a, b]) => { B[a][b] = state; });   // a chain is all-bomb or all-safe
+      remaining -= cells.length;
       break;
     }
   }
-  for (let k = 0; k < o.multipliers; k++) {
+  for (let k = 0; k < multCells; k++) {
     for (let tries = 0; tries < 80; tries++) {
       const r = randInt(rng, H), c = randInt(rng, W);
       if (C[r][c]) continue;
@@ -58,19 +66,20 @@ function makeStructure(rng, o) {
 }
 
 function pickWeights(weights, allowed) {
-  return Object.fromEntries(Object.entries(weights).filter(([t]) => allowed.has(Number(t))));
+  return Object.fromEntries(Object.entries(weights).filter(([t, w]) => w > 0 && allowed.includes(Number(t))));
 }
 
-function assignClues(rng, B, C, o) {
+/** cellWt / lineWt: the weights drawn for this level, { code: weight } (only types that can be placed per cell / line). */
+function assignClues(rng, B, C, o, cellWt, lineWt) {
   const { W, H } = o;
   const cellVals = Array.from({ length: H }, () => Array(W).fill(null));
   const cells = [];
   for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) if (C[r][c] === 0) cells.push([r, c]);
   shuffle(rng, cells);
   for (const [r, c] of cells) {
-    for (const t of weightedOrder(rng, pickWeights({ 1: 40, 2: 20, 3: 15, 6: 25 }, o.cellTypes))) {
+    for (const t of weightedOrder(rng, pickWeights(cellWt, [1, 2, 3, 6]))) {
       const v = cellValue(t, B, C, r, c);
-      if (t === CELL.AREA && v > o.maxAreaClue) continue;   // too big for a human to count: take the next clue type instead
+      if (t === CELL.AREA && v > o.areaClueMaxSize) continue;   // too big for a human to count: take the next clue type instead
       let dup = false;
       if (!o.redundant) {     // "contradiction filtering": no identical adjacent clues
       for (let dr = -1; dr <= 1 && !dup; dr++) for (let dc = -1; dc <= 1; dc++) {
@@ -82,8 +91,7 @@ function assignClues(rng, B, C, o) {
       C[r][c] = t; cellVals[r][c] = v; break;
     }
   }
-  const lineW = pickWeights({ 1: 50, 2: 25, 3: 25 }, o.lineTypes);
-  const pickLine = () => (Object.keys(lineW).length ? weightedOrder(rng, lineW)[0] : 0);
+  const pickLine = () => (Object.keys(lineWt).length ? weightedOrder(rng, lineWt)[0] : 0);
   const top = [], left = [];
   for (let c = 0; c < W; c++) top.push(pickLine());
   for (let r = 0; r < H; r++) left.push(pickLine());
@@ -92,25 +100,45 @@ function assignClues(rng, B, C, o) {
   return { cellVals, top, left, topVals, leftVals };
 }
 
+/**
+ * One deterministic attempt: everything is derived from `rng` (seeded) and `o`, and effort is limited by counted solver
+ * work (never by time), so a seed always gives the same level - or always none.
+ */
 function tryGenerate(rng, o, log) {
   const { W, H } = o;
-  // optional wall-clock cap for this attempt (o.attemptMs, 0 = none): the game uses it so one slow seed cannot stall generation
-  const t0Attempt = Date.now();
-  const timedOut = () => o.attemptMs > 0 && Date.now() - t0Attempt > o.attemptMs;
-  const rateLimit = () => (o.attemptMs > 0 ? Math.max(0.2, Math.min(o.timeLimit, (o.attemptMs - (Date.now() - t0Attempt)) / 1000)) : o.timeLimit);
-  const { B, C } = makeStructure(rng, o);
+  const total = W * H;
+  // 1. draw the level's character: every ranged value gets one random number inside its range (fixed order)
+  const lerp = (range) => range[0] + rng() * (range[1] - range[0]);
+  const [minDepth, maxDepth] = o.depth;
+  const ratio = lerp(o.bombs);
+  const dens = lerp(o.cellCluesDensity), lineDens = lerp(o.lineCluesDensity);
+  const cellWt = {}, lineWt = {};
+  for (const t of [1, 2, 3, 4, 5, 6]) if (o.cellWeights[t]) { const w = lerp(o.cellWeights[t]); if (w > 0) cellWt[t] = w; }
+  for (const t of [1, 2, 3]) if (o.lineWeights[t]) { const w = lerp(o.lineWeights[t]); if (w > 0) lineWt[t] = w; }
+  const targetCells = Math.round(dens * total), targetLines = Math.round(lineDens * (W + H));
+  // 2. weights -> percentages -> how many cells of each structural clue (chains / multipliers) this level gets
+  const sumW = Object.values(cellWt).reduce((a, b) => a + b, 0);
+  const cellsOf = (t) => (sumW > 0 && cellWt[t] ? Math.round((cellWt[t] / sumW) * targetCells) : 0);
+  log(`  bombs ${(ratio * 100).toFixed(0)}%, clue cells ${targetCells}, line clues ${targetLines}, weights ${JSON.stringify(cellWt)} / ${JSON.stringify(lineWt)}`);
+
+  // deterministic effort accounting (see options.js)
+  const meter = { used: 0, limit: o.seedWork };
+  const outOfWork = () => meter.used >= o.seedWork;
+  const callMeter = () => { meter.limit = Math.min(meter.used + o.callWork, o.seedWork); return meter; };
+
+  const { B, C } = makeStructure(rng, o, ratio, cellsOf(CELL.CHAIN), cellsOf(CELL.MULT));
   const structCount = C.flat().filter((t) => t === CELL.CHAIN || t === CELL.MULT).length;
-  const { cellVals, top, left, topVals, leftVals } = assignClues(rng, B, C, o);
+  const { cellVals, top, left, topVals, leftVals } = assignClues(rng, B, C, o, cellWt, lineWt);
   const orig = { C: C.map((r) => r.slice()), top: top.slice(), left: left.slice() };
-  const build = (st) => makePuzzle({ W, H, C: st.C, top: st.top, left: st.left, cellVals, topVals, leftVals }, { maxNodes: o.nodeBudget });
+  const build = (st) => makePuzzle({ W, H, C: st.C, top: st.top, left: st.left, cellVals, topVals, leftVals }, { maxNodes: o.nodeBudget, meter });
   const copy = (st) => ({ C: st.C.map((r) => r.slice()), top: st.top.slice(), left: st.left.slice() });
   const unique = (st) => { const r = countSolutions(build(st), 2, o.searchBudget); return r.count === 1 && !r.aborted; };
 
   // depth-0 levels are pruned with the real solver (cheap at depth 0), so clues are only dropped while direct deduction still works
-  const acceptable = (st) => (o.maxDepth === 0 ? rateSolve(build(st), { maxDepth: 0, timeLimit: rateLimit() }).solved : unique(st));
+  const acceptable = (st) => (maxDepth === 0 ? rateSolve(build(st), { maxDepth: 0, meter: callMeter() }).solved : unique(st));
   const full = copy(orig);
   if (!unique(full)) { log('  full clue set is not unique, re-rolling'); return null; }
-  if (o.maxDepth === 0 && !acceptable(full)) { log('  not solvable by direct deduction even with every clue, re-rolling'); return null; }
+  if (maxDepth === 0 && !acceptable(full)) { log('  not solvable by direct deduction even with every clue, re-rolling'); return null; }
 
   // ---- prune clues while the solution stays unique
   const slots = [];
@@ -129,39 +157,37 @@ function tryGenerate(rng, o, log) {
       const cur = getV(state, s);
       if (!cur) continue;
       if (s.k === 'cell' ? nCells <= targetCells : nLines <= targetLines) continue;
-      if (timedOut()) return false;
+      if (outOfWork()) return false;
       setV(state, s, 0);
       if (acceptable(state)) { removed.push({ s, v: cur }); if (s.k === 'cell') nCells--; else nLines--; }
       else setV(state, s, cur);
     }
     return true;
   };
-  const total = W * H;
-  const dens = o.density[0] + rng() * (o.density[1] - o.density[0]);
   let T = Date.now();
-  if (!pruneTo(Math.round(dens * total), Math.round(o.lineDensity * (W + H)))) { log('  attempt timed out'); return null; }
+  if (!pruneTo(targetCells, targetLines)) { log('  out of work budget'); return null; }
   log(`  pruned to ${removed.length} removals in ${Date.now() - T}ms`);
 
-  const rate = (st) => { const t0 = Date.now(); const res = rateSolve(build(st), { maxDepth: o.maxDepth, timeLimit: rateLimit() }); log(`  rated: solved=${res.solved} rating=${res.rating} timeout=${!!res.timeout} ${Date.now() - t0}ms`); return res; };
+  const rate = (st) => { const t0 = Date.now(); const res = rateSolve(build(st), { maxDepth, meter: callMeter() }); log(`  rated: solved=${res.solved} rating=${res.rating} timeout=${!!res.timeout} ${Date.now() - t0}ms`); return res; };
   let r = rate(state);
-  if (r.solved && r.rating < o.minDepth) {            // too easy: keep removing clues
-    if (!pruneTo(0, 0)) { log('  attempt timed out'); return null; }
+  if (r.solved && r.rating < minDepth) {            // too easy: keep removing clues
+    if (!pruneTo(0, 0)) { log('  out of work budget'); return null; }
     r = rate(state);
   }
   if (!r.solved) {                                     // too hard: put clues back (monotone: more clues = easier)
     const withBack = (k) => { const st = copy(state); removed.slice().reverse().slice(0, k).forEach(({ s, v }) => setV(st, s, v)); return st; };
     let lo = 0, hi = removed.length;
     if (!rate(withBack(hi)).solved) { log('  not solvable within the depth limit even with every clue'); return null; }
-    while (hi - lo > 1) { if (timedOut()) { log('  attempt timed out'); return null; } const mid = (lo + hi) >> 1; if (rate(withBack(mid)).solved) hi = mid; else lo = mid; }
+    while (hi - lo > 1) { if (outOfWork()) { log('  out of work budget'); return null; } const mid = (lo + hi) >> 1; if (rate(withBack(mid)).solved) hi = mid; else lo = mid; }
     Object.assign(state, withBack(hi));
     r = rate(state);
   }
   if (!r.solved) return null;
-  if (r.rating < o.minDepth) { log(`  rating ${r.rating} < min-depth ${o.minDepth}`); return null; }
+  if (r.rating < minDepth) { log(`  rating ${r.rating} < minimum depth ${minDepth}`); return null; }
   const cellClues = state.C.flat().filter((t) => t >= 1).length;
   return {
     W, H, B, C: state.C, top: state.top, left: state.left,
-    meta: { rating: r.rating, steps: r.steps, stepsByDepth: r.byDepth, clueDensity: Number((cellClues / total).toFixed(2)), lineClues: state.top.concat(state.left).filter(Boolean).length, cellTypes: [...new Set(state.C.flat().filter(Boolean))].sort(), lineTypes: [...new Set(state.top.concat(state.left).filter(Boolean))].sort() },
+    meta: { rating: r.rating, steps: r.steps, stepsByDepth: r.byDepth, clueDensity: Number((cellClues / total).toFixed(2)), work: Math.round(meter.used), bombRatio: Number(ratio.toFixed(2)), lineClues: state.top.concat(state.left).filter(Boolean).length, cellTypes: [...new Set(state.C.flat().filter(Boolean))].sort(), lineTypes: [...new Set(state.top.concat(state.left).filter(Boolean))].sort() },
   };
 }
 
@@ -183,14 +209,13 @@ ${rows(lv.C)}
 `;
 }
 
+/**
+ * The level for one seed, or null if that seed does not give one (then try another seed).
+ * Deterministic: same options + same seed = same result, on any machine.
+ */
 export function generateLevel(o, seed, log = () => {}) {
-  const rng = mulberry32(seed);
-  for (let a = 1; a <= o.attempts; a++) {
-    log(`attempt ${a}`);
-    const lv = tryGenerate(rng, o, log);
-    if (lv) return { ...lv, meta: { ...lv.meta, seed, attempts: a, level: o.level } };
-  }
-  return null;
+  const lv = tryGenerate(mulberry32(seed), o, log);
+  return lv ? { ...lv, meta: { ...lv.meta, seed, level: o.level } } : null;
 }
 
 /** The level as the plain object the game loads (same shape as the JSON files). */

@@ -92,6 +92,7 @@ export class MenuScene extends Container {
   }
 
   showLoading(difficulty) {
+    this.mode = 'random';
     this.difficulty = difficulty;
     this.loadingText = 'Generating a level…';
     this.go('loading');
@@ -232,7 +233,7 @@ export class MenuScene extends Container {
     this.addTitle(`Difficulty ${this.difficulty}`, w, top + 44, 20);
     this.loadingLabel = makeText(this.loadingText, { size: 16, bold: false, fill: 0xd0d2d9 });
     this.loadingLabel.position.set(w / 2, top + 84);
-    const hard = PRESETS.levels[this.difficulty].maxDepth >= 2;
+    const hard = PRESETS.levels[this.difficulty].depth[1] >= 2;
     const note = makeText(hard ? 'This difficulty can take several minutes. Predefined levels start instantly.' : 'Higher difficulties can take a while.', { size: 14, bold: false, fill: 0x9a9db0, wrapWidth: Math.min(380, w - 40) });
     note.position.set(w / 2, top + 112);
     this.addChild(this.loadingLabel, note);

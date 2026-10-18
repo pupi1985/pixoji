@@ -1,6 +1,7 @@
 import './styles.css';
 import { Application } from 'pixi.js';
 import { GRID_CONFIG } from './config.js';
+import { DIFFICULTIES } from './game/presets.js';
 import { MenuScene } from './scenes/menu-scene.js';
 import { GameScene } from './scenes/game-scene.js';
 import { loadPredefinedLevel, generateRandomLevel, CANCELLED } from './game/level-source.js';
@@ -50,19 +51,20 @@ import { markLevelCompleted } from './progress.js';
   let job = null, timer = null;
   const stopJob = () => { clearInterval(timer); timer = null; job = null; };
 
-  const playRandom = async (difficulty) => {
+  /** seed = null: any seed; a number: exactly that seed (replays the level another player or the CLI reported). */
+  const playRandom = async (difficulty, seed = null) => {
     menu.showLoading(difficulty);
     const started = Date.now();
     let tried = 0;
     const text = () => `Generating a level… ${Math.round((Date.now() - started) / 1000)}s  ·  ${tried} seeds discarded`;
     timer = setInterval(() => menu.setLoadingText(text()), 500);
-    const mine = (job = generateRandomLevel(difficulty, { onProgress: (n) => { tried = n; } }));
+    const mine = (job = generateRandomLevel(difficulty, { seed, onProgress: (n) => { tried = n; } }));
     try {
-      const { data, seed } = await mine.promise;
+      const { data, seed: usedSeed } = await mine.promise;
       if (job !== mine) return;
       stopJob();
       menu.finishLoading();
-      play({ mode: 'random', difficulty, seed }, `Difficulty: ${difficulty}  ·  Seed: ${seed}`, data);
+      play({ mode: 'random', difficulty, seed: usedSeed }, `Difficulty: ${difficulty}  ·  Seed: ${usedSeed}`, data);
     } catch (error) {
       if (error === CANCELLED || job !== mine) return;
       stopJob();
@@ -74,7 +76,7 @@ import { markLevelCompleted } from './progress.js';
 
   const menu = new MenuScene({
     onPlayPredefined: playPredefined,
-    onPlayRandom: playRandom,
+    onPlayRandom: (difficulty) => playRandom(difficulty),
     onCancelGeneration: () => { job?.cancel(); stopJob(); },
     onNavigate: saveMenuState,
   });
@@ -94,9 +96,18 @@ import { markLevelCompleted } from './progress.js';
   app.renderer.on('resize', (width, height) => current?.layout(width, height));
 
   // ------------------------------------------------------------------ start: resume whatever was going on
-  const saved = loadSavedGame();
+  // a link like  ?difficulty=4&seed=123456789  replays exactly that random level
+  const params = new URLSearchParams(window.location.search);
+  const linkSeed = params.get('seed'), linkDifficulty = Number(params.get('difficulty'));
+  const fromLink = linkSeed !== null && /^\d+$/.test(linkSeed) && DIFFICULTIES.includes(linkDifficulty);
+  if (params.has('seed') || params.has('difficulty')) window.history.replaceState(null, '', window.location.pathname);
+
+  const saved = fromLink ? null : loadSavedGame();
   menu.restore(loadMenuState());   // so "back to menu" lands where the player was
-  if (saved) {
+  if (fromLink) {
+    show(menu);
+    playRandom(linkDifficulty, Number(linkSeed));
+  } else if (saved) {
     play(saved.session, saved.title, saved.levelData, saved);
   } else {
     show(menu);

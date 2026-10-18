@@ -4,8 +4,8 @@
  * Level JSON format (same as level2.json / level3.json):
  *   { grid:{width,height}, bombs:[[0/1..]..], clues:{ top:[..], left:[..], grid:[[..]..] } }
  *
- * Cell clue codes : 1 Total, 2 Isolated, 3 Surrounded, 4 Chain, 5 Multiplier, 6 Area
- * Line clue codes : 1 Total, 2 Longest run, 3 Segments
+ * Cell clue codes : 1 Neighbor, 2 Isolated, 3 Surrounded, 4 Chain, 5 Multiplier, 6 Area
+ * Line clue codes : 1 Count, 2 Longest run, 3 Segments
  *
  * The solver never looks at the bombs matrix: clue VALUES are computed from it once
  * (exactly like the game does) and from then on only the values + clue layout are used.
@@ -102,6 +102,7 @@ export function makePuzzle(spec, opts = {}) {
   const puz = {
     W, H, C, top, left, cellVals, topVals, leftVals,
     maxNodes: opts.maxNodes ?? 30000,
+    meter: opts.meter ?? null,   // optional deterministic work counter (see options.js)
     gid: Array.from({ length: H }, () => Array(W).fill(-1)),
     groups: [], constraints: [], byGroup: [], globals: [],
   };
@@ -168,6 +169,7 @@ function enumAnalyze(puz, cons, get) {
     cur[g] = -1;
   };
   dfs(0);
+  if (puz.meter) puz.meter.used += 1 + nodes / 32;   // work accounting: the cost of an analysis is its enumeration size
   if (over) return { contradiction: false, forced: [], unk, inconclusive: true };
   if (count === 0) return { contradiction: true, forced: [], unk };
   const forced = [];
@@ -191,7 +193,7 @@ function addLine(puz, axis, idx, type, value) {
   const origin = axis === 'col' ? `The clue above column ${idx + 1}` : `The clue left of row ${idx + 1}`;
   const mult = ws.includes(2) ? ' (a bomb on a multiplier cell counts double)' : '';
   if (type === LINE.TOTAL) {
-    register(puz, linear(gs, ws, value, () => `${origin} (Total) says the bombs in ${where} add up to ${value}${mult}`));
+    register(puz, linear(gs, ws, value, () => `${origin} (Count) says the bombs in ${where} add up to ${value}${mult}`));
   } else if (type === LINE.MAXRUN) {
     register(puz, {
       kind: 'maxrun', groups: uniq(gs), value,
@@ -252,7 +254,7 @@ function addCell(puz, r, c, type, value) {
 
   if (type === CELL.TOTAL) {
     register(puz, linear(block.map(([a, b]) => puz.gid[a][b]), block.map(([a, b]) => cellW(puz.C[a][b])), value,
-      () => `The clue at ${here} (Total) says the 3x3 block around it (itself included) holds bombs adding up to ${value}${mult}`));
+      () => `The clue at ${here} (Neighbor) says the 3x3 block around it (itself included) holds bombs adding up to ${value}${mult}`));
     return;
   }
   if (type === CELL.ISOLATED || type === CELL.SURROUNDED) {

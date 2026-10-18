@@ -88,7 +88,12 @@ class State {
 
 const dirtyOf = (puz, g) => puz.byGroup[g].concat(puz.globals);
 const snapshot = (cons, st) => { const o = []; for (const g of cons.groups) if (st.vals[g] >= 0) o.push({ g, v: st.vals[g], fact: st.facts[g] }); return o; };
-const checkTime = (ctx) => { if (ctx.deadline && Date.now() > ctx.deadline) throw TIMEOUT; };
+// Effort limits. The generator uses `meter` (a deterministic work counter, so results never depend on machine speed);
+// `deadline` (wall-clock) is only for interactive use of the solver.
+const checkTime = (ctx) => {
+  if (ctx.meter && ++ctx.meter.used > ctx.meter.limit) throw TIMEOUT;
+  if (ctx.deadline && Date.now() > ctx.deadline) throw TIMEOUT;
+};
 
 /** Direct deductions: repeatedly apply single clues until nothing new is forced. */
 function propagate(ctx, st, frame, dirty, log) {
@@ -204,7 +209,7 @@ function hypothesisStep(ctx, st, root, D) {
 }
 
 export function makeCtx(puz, opts = {}) {
-  return { puz, maxDepth: opts.maxDepth ?? 1, cases: opts.cases !== false, deadline: opts.timeLimit ? Date.now() + opts.timeLimit * 1000 : 0 };
+  return { puz, maxDepth: opts.maxDepth ?? 1, cases: opts.cases !== false, deadline: opts.timeLimit ? Date.now() + opts.timeLimit * 1000 : 0, meter: opts.meter ?? null };
 }
 
 /** Lazy step generator. Yields facts (kind deduce | contra | cases); returns a summary object. */
@@ -400,9 +405,9 @@ export function renderBoard(puz, vals) {
   const tok = (r, c) => {
     const t = puz.C[r][c];
     if (t === 4) return '='; if (t === 5) return 'M';
-    return isNumericCell(t) ? ({ 1: 'T', 2: 'I', 3: 'S', 6: 'A' }[t] + puz.cellVals[r][c]) : '';
+    return isNumericCell(t) ? ({ 1: 'N', 2: 'I', 3: 'S', 6: 'A' }[t] + puz.cellVals[r][c]) : '';
   };
-  const lt = (t, v) => (t ? ({ 1: 'T', 2: 'R', 3: 'G' }[t] + v) : '');
+  const lt = (t, v) => (t ? ({ 1: 'C', 2: 'R', 3: 'G' }[t] + v) : '');
   const lines = [];
   lines.push(' '.repeat(8) + Array.from({ length: puz.W }, (_, c) => `C${c + 1}`.padEnd(5)).join(''));
   lines.push(' '.repeat(8) + puz.top.map((t, c) => lt(t, puz.topVals[c]).padEnd(5)).join(''));
@@ -413,4 +418,4 @@ export function renderBoard(puz, vals) {
   }
   return lines.join('\n');
 }
-export const LEGEND = 'Legend: cell clues T=total I=isolated S=surrounded A=area  "="=linked chain  M=multiplier | line clues T=total R=longest run G=number of groups | # bomb  . safe  ? unknown';
+export const LEGEND = 'Legend: cell clues N=neighbor I=isolated S=surrounded A=area  "="=linked chain  M=multiplier | line clues C=count R=longest run G=number of groups | # bomb  . safe  ? unknown';

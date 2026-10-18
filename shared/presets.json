@@ -1,136 +1,190 @@
 {
-  "defaultLevel": 4,
+  "defaultLevel": 7,
+  "generation": {
+    "seedWork": 1000000,
+    "callWork": 500000,
+    "nodeBudget": 30000,
+    "searchBudget": 150
+  },
   "levels": {
     "1": {
-      "redundant": true,
       "size": [4, 4],
-      "cellClues": ["total"],
-      "lineClues": [],
-      "bombRatio": 0.3,
-      "density": [0.7, 0.9],
-      "lineDensity": 1,
-      "minDepth": 0,
-      "maxDepth": 0,
-      "chains": 0,
-      "maxChain": 2,
-      "multipliers": 0,
-      "maxAreaClue": 10,
-      "about": "4x4, only cell totals, almost all cells show clues"
+      "bombs": [0.24, 0.36],
+      "cellCluesDensity": [1, 1],
+      "cellClues": {
+        "neighbor": [1, 1]
+      },
+      "lineCluesDensity": [0, 0],
+      "lineClues": {},
+      "depth": [0, 0],
+      "redundant": true,
+      "about": "4x4, only neighbor clues, every cell shows a clue"
     },
     "2": {
-      "redundant": true,
       "size": [5, 5],
-      "cellClues": ["total", "chain"],
-      "lineClues": ["total"],
-      "bombRatio": 0.35,
-      "density": [0.65, 0.85],
-      "lineDensity": 1,
-      "minDepth": 0,
-      "maxDepth": 0,
-      "chains": 0,
-      "maxChain": 2,
-      "multipliers": 0,
-      "maxAreaClue": 10,
-      "about": "5x5, cell totals + row/column totals, many cells show a clue"
+      "bombs": [0.29, 0.41],
+      "cellCluesDensity": [0.95, 1],
+      "cellClues": {
+        "neighbor": [1, 1]
+      },
+      "lineCluesDensity": [1, 1],
+      "lineClues": {
+        "count": [1, 1]
+      },
+      "depth": [0, 0],
+      "redundant": true,
+      "about": "5x5, neighbor clues + row/column counts, almost every cell shows a clue"
     },
     "3": {
-      "redundant": true,
       "size": [6, 6],
-      "cellClues": ["total", "chain", "isolated"],
-      "lineClues": ["total", "longest-run"],
-      "bombRatio": 0.38,
-      "density": [0.6, 0.8],
-      "lineDensity": 1,
-      "minDepth": 0,
-      "maxDepth": 0,
-      "chains": 0,
-      "maxChain": 2,
-      "multipliers": 0,
-      "maxAreaClue": 10,
+      "bombs": [0.32, 0.44],
+      "cellCluesDensity": [0.85, 1],
+      "cellClues": {
+        "neighbor": [30, 50],
+        "area": [19, 31]
+      },
+      "lineCluesDensity": [1, 1],
+      "lineClues": {
+        "count": [38, 62],
+        "groups": [19, 31]
+      },
+      "depth": [0, 0],
+      "areaClueMaxSize": 10,
+      "redundant": true,
       "about": "6x6, adds area clues and \"groups\" line clues, lots of redundancy"
     },
     "4": {
       "size": [8, 8],
-      "cellClues": ["total", "chain", "isolated", "surrounded"],
-      "lineClues": ["total", "longest-run"],
-      "density": [0.55, 0.75],
-      "lineDensity": 1,
-      "minDepth": 0,
-      "maxDepth": 0,
-      "chains": 0,
-      "maxChain": 2,
-      "multipliers": 0,
-      "maxAreaClue": 10,
-      "about": "8x8, all number clues, no chains/x2, direct deductions only"
+      "bombs": [0.36, 0.48],
+      "cellCluesDensity": [0.7, 0.85],
+      "cellClues": {
+        "neighbor": [30, 50],
+        "isolated": [15, 25],
+        "surrounded": [11, 19],
+        "area": [19, 31]
+      },
+      "lineCluesDensity": [1, 1],
+      "lineClues": {
+        "count": [38, 62],
+        "longest-run": [19, 31],
+        "groups": [19, 31]
+      },
+      "depth": [0, 0],
+      "areaClueMaxSize": 10,
+      "about": "8x8, all number clues, no chains or multipliers, direct deductions only"
     },
     "5": {
       "size": [8, 8],
-      "cellClues": ["total", "chain", "isolated", "surrounded", "area"],
-      "lineClues": ["total", "longest-run", "groups"],
-      "density": [0.5, 0.65],
-      "lineDensity": 0.9,
-      "minDepth": 0,
-      "maxDepth": 0,
-      "chains": 1,
-      "maxChain": 3,
-      "multipliers": 0,
-      "maxAreaClue": 10,
+      "bombs": [0.36, 0.48],
+      "cellCluesDensity": [0.5, 0.65],
+      "cellClues": {
+        "neighbor": [30, 50],
+        "isolated": [15, 25],
+        "surrounded": [11, 19],
+        "area": [19, 31],
+        "chain": [3.6, 10.9]
+      },
+      "lineCluesDensity": [0.9, 0.9],
+      "lineClues": {
+        "count": [38, 62],
+        "longest-run": [19, 31],
+        "groups": [19, 31]
+      },
+      "depth": [0, 0],
+      "chainClueMaxSize": 3,
+      "areaClueMaxSize": 10,
       "about": "fewer clues, one small chain, direct deductions only"
     },
     "6": {
       "size": [8, 8],
-      "cellClues": ["total", "chain", "isolated", "surrounded", "area", "multiplier"],
-      "lineClues": ["total", "longest-run", "groups"],
-      "density": [0.4, 0.5],
-      "lineDensity": 0.85,
-      "minDepth": 1,
-      "maxDepth": 1,
-      "chains": 1,
-      "maxChain": 3,
-      "multipliers": 1,
-      "maxAreaClue": 10,
+      "bombs": [0.36, 0.48],
+      "cellCluesDensity": [0.4, 0.5],
+      "cellClues": {
+        "neighbor": [30, 50],
+        "isolated": [15, 25],
+        "surrounded": [11, 19],
+        "area": [19, 31],
+        "chain": [4.9, 14.8],
+        "multiplier": [2.0, 5.9]
+      },
+      "lineCluesDensity": [0.85, 0.85],
+      "lineClues": {
+        "count": [38, 62],
+        "longest-run": [19, 31],
+        "groups": [19, 31]
+      },
+      "depth": [1, 1],
+      "chainClueMaxSize": 3,
+      "areaClueMaxSize": 10,
       "about": "needs one assumption (\"suppose X is a bomb...\")"
     },
     "7": {
       "size": [8, 8],
-      "cellClues": ["total", "isolated", "surrounded"],
-      "lineClues": ["total", "longest-run", "groups"],
-      "density": [0.28, 0.36],
-      "lineDensity": 0.65,
-      "minDepth": 1,
-      "maxDepth": 2,
-      "chains": 2,
-      "maxChain": 4,
-      "multipliers": 2,
-      "maxAreaClue": 10,
+      "bombs": [0.36, 0.48],
+      "cellCluesDensity": [0.28, 0.36],
+      "cellClues": {
+        "neighbor": [30, 50],
+        "isolated": [15, 25],
+        "surrounded": [11, 19],
+        "area": [19, 31],
+        "chain": [24.0, 72.1],
+        "multiplier": [8.0, 24.0]
+      },
+      "lineCluesDensity": [0.65, 0.65],
+      "lineClues": {
+        "count": [38, 62],
+        "longest-run": [19, 31],
+        "groups": [19, 31]
+      },
+      "depth": [1, 2],
+      "chainClueMaxSize": 4,
+      "areaClueMaxSize": 10,
       "about": "up to an assumption inside an assumption"
     },
     "8": {
       "size": [8, 8],
-      "cellClues": ["total", "isolated", "surrounded"],
-      "lineClues": ["total", "longest-run", "groups"],
-      "density": [0.15, 0.2],
-      "lineDensity": 0.5,
-      "minDepth": 2,
-      "maxDepth": 2,
-      "chains": 2,
-      "maxChain": 5,
-      "multipliers": 3,
-      "maxAreaClue": 10,
+      "bombs": [0.36, 0.48],
+      "cellCluesDensity": [0.15, 0.2],
+      "cellClues": {
+        "neighbor": [30, 50],
+        "isolated": [15, 25],
+        "surrounded": [11, 19],
+        "area": [19, 31],
+        "chain": [105.0, 315.0],
+        "multiplier": [45.0, 135.0]
+      },
+      "lineCluesDensity": [0.5, 0.5],
+      "lineClues": {
+        "count": [38, 62],
+        "longest-run": [19, 31],
+        "groups": [19, 31]
+      },
+      "depth": [2, 2],
+      "chainClueMaxSize": 5,
+      "areaClueMaxSize": 10,
       "about": "sparse clues, always needs nested assumptions"
     },
     "9": {
       "size": [8, 8],
-      "cellClues": ["total", "isolated", "surrounded"],
-      "lineClues": ["total", "longest-run", "groups"],
-      "density": [0.1, 0.15],
-      "lineDensity": 0.35,
-      "minDepth": 2,
-      "maxDepth": 3,
-      "chains": 3,
-      "maxChain": 5,
-      "multipliers": 3,
-      "maxAreaClue": 10,
+      "bombs": [0.36, 0.48],
+      "cellCluesDensity": [0.1, 0.15],
+      "cellClues": {
+        "neighbor": [30, 50],
+        "isolated": [15, 25],
+        "surrounded": [11, 19],
+        "area": [19, 31],
+        "chain": [116.7, 350.0],
+        "multiplier": [33.3, 100.0]
+      },
+      "lineCluesDensity": [0.35, 0.35],
+      "lineClues": {
+        "count": [38, 62],
+        "longest-run": [19, 31],
+        "groups": [19, 31]
+      },
+      "depth": [2, 3],
+      "chainClueMaxSize": 5,
+      "areaClueMaxSize": 10,
       "about": "sparsest clues, nested assumptions (slow to generate; may keep more clues than the density asks)"
     }
   }
