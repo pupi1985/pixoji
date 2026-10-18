@@ -55,7 +55,7 @@ function makeTick(x, y) {
  * a random level is being generated and 'message' reports errors.
  */
 export class MenuScene extends Container {
-  /** callbacks: { onPlayPredefined(difficulty, number), onPlayRandom(difficulty), onCancelGeneration() } */
+  /** callbacks: { onPlayPredefined(difficulty, number), onPlayRandom(difficulty), onCancelGeneration(), onNavigate(state) } */
   constructor(callbacks) {
     super();
     this.callbacks = callbacks;
@@ -76,7 +76,20 @@ export class MenuScene extends Container {
   /** Redraws the current view (e.g. after coming back from a level, so new ticks appear). */
   refresh() { this.render(); }
 
-  go(view) { this.view = view; this.render(); }
+  go(view) {
+    this.view = view;
+    this.render();
+    if (view !== 'loading' && view !== 'message') this.callbacks.onNavigate?.({ view, mode: this.mode, difficulty: this.difficulty });
+  }
+
+  /** Restores where the player was in the menus (from a previous visit); ignores anything invalid. */
+  restore(state) {
+    const okMode = state?.mode === 'predefined' || state?.mode === 'random';
+    if (!okMode || !DIFFICULTIES.includes(state.difficulty ?? DIFFICULTIES[0])) return;
+    this.mode = state.mode;
+    if (state.view === 'levels' && state.mode === 'predefined' && DIFFICULTIES.includes(state.difficulty)) { this.difficulty = state.difficulty; this.view = 'levels'; }
+    else if (state.view === 'difficulty' || state.view === 'levels') this.view = 'difficulty';
+  }
 
   showLoading(difficulty) {
     this.difficulty = difficulty;
@@ -219,7 +232,8 @@ export class MenuScene extends Container {
     this.addTitle(`Difficulty ${this.difficulty}`, w, top + 44, 20);
     this.loadingLabel = makeText(this.loadingText, { size: 16, bold: false, fill: 0xd0d2d9 });
     this.loadingLabel.position.set(w / 2, top + 84);
-    const note = makeText('Higher difficulties can take a while.', { size: 14, bold: false, fill: 0x9a9db0, wrapWidth: w - 40 });
+    const hard = PRESETS.levels[this.difficulty].maxDepth >= 2;
+    const note = makeText(hard ? 'This difficulty can take several minutes. Predefined levels start instantly.' : 'Higher difficulties can take a while.', { size: 14, bold: false, fill: 0x9a9db0, wrapWidth: Math.min(380, w - 40) });
     note.position.set(w / 2, top + 112);
     this.addChild(this.loadingLabel, note);
     const cancel = createTextButton({

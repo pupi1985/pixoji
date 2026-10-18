@@ -21,16 +21,18 @@ src/                    the game (PixiJS)
   main.js               bootstrap and wiring (menu <-> game <-> level sources)
   config.js             visual + app config (incl. how many predefined levels each difficulty has)
   progress.js           completed predefined levels (localStorage key "completedLevels")
+  game/saved-game.js    resume after a page reload: current level + marks + undo history ("savedGame") and menu position ("menuState")
   scenes/menu-scene.js  mode -> difficulty -> level screens, "generating" screen
   scenes/game-scene.js  playing a level: input, undo/redo, reset, HUD
   game/                 grid.js, cell.js, history.js, level-source.js (fetch / generate), presets.js
   ui/widgets.js         buttons, circular-arrow icons, confirmation dialog
-  workers/generator.worker.js   random level generation off the main thread
+  workers/generator.worker.js   random level generation off the main thread (APP_CONFIG.generation: parallel workers, per-seed time cap)
 ```
 
 ## Commands
 
 - `npm run dev` / `npm run build` / `npm run preview`
+- `npm run play` builds and serves the production version on your network: use it to test on a phone (the dev server reloads the page whenever the connection drops)
 - `npm run generate -- --level 3 --count 5 --out public/levels/3` (then set the count in `APP_CONFIG.predefinedLevels` in `src/config.js`)
 - `npm run solve -- public/levels/3/level1.json`
 

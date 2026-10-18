@@ -16,7 +16,7 @@ const IDLE_DRAG = () => ({ active: false, state: null, changes: null });
  * Cells linked by a chain (clue 4) always change together.
  */
 export class GameScene extends Container {
-  /** callbacks: { onExit(), onWin(session) } */
+  /** callbacks: { onExit(), onWin(session), onChange(snapshot) } - onChange fires after every change worth saving */
   constructor(callbacks) {
     super();
     this.callbacks = callbacks;
@@ -60,20 +60,35 @@ export class GameScene extends Container {
 
   // ------------------------------------------------------------------ lifecycle
 
-  /** session: { mode: 'predefined'|'random', difficulty, levelNumber?, seed? } */
-  start({ levelData, title, session }) {
+  /**
+   * session: { mode: 'predefined'|'random', difficulty, levelNumber?, seed? }
+   * saved (optional): a snapshot() to resume from.
+   */
+  start({ levelData, title, session, saved = null }) {
     this.levelData = levelData;
     this.session = session;
+    this.title = title;
     this.titleText.text = title;
-    this.cellStates = new Array(levelData.grid.height * levelData.grid.width).fill(0);
+    this.cellStates = saved ? saved.cellStates.slice() : new Array(levelData.grid.height * levelData.grid.width).fill(0);
     this.history.clear();
-    this.hasWon = false;
-    this.winText.visible = false;
+    if (saved) { this.history.undoStack = saved.undoStack.slice(); this.history.redoStack = saved.redoStack.slice(); }
+    this.hasWon = !!saved?.hasWon;
+    this.winText.visible = this.hasWon;
     this.drag = IDLE_DRAG();
     this.dialog.close();
     window.addEventListener('keydown', this.onKeyDown);
     this.updateButtons();
   }
+
+  /** Everything needed to resume this level later (see saved-game.js). */
+  snapshot() {
+    return {
+      v: 1, session: this.session, title: this.title, levelData: this.levelData, cellStates: this.cellStates,
+      undoStack: this.history.undoStack.slice(-200), redoStack: this.history.redoStack.slice(-200), hasWon: this.hasWon,
+    };
+  }
+
+  changed() { this.callbacks.onChange?.(this.snapshot()); }
 
   /** Called when leaving the level. */
   stop() {
@@ -150,6 +165,7 @@ export class GameScene extends Container {
     this.history.push(changes);
     this.checkVictory();
     this.updateButtons();
+    if (changes.length) this.changed();
   }
 
   handleKey(e) {
@@ -194,6 +210,7 @@ export class GameScene extends Container {
     if (!changes) return;
     for (const c of changes) this.setCellState(this.grid.cells[c.index], c.from);
     this.updateButtons();
+    this.changed();
   }
 
   redo() {
@@ -202,6 +219,7 @@ export class GameScene extends Container {
     if (!changes) return;
     for (const c of changes) this.setCellState(this.grid.cells[c.index], c.to);
     this.updateButtons();
+    this.changed();
   }
 
   askReset() {
@@ -222,6 +240,7 @@ export class GameScene extends Container {
     this.hasWon = false;
     this.winText.visible = false;
     this.updateButtons();
+    this.changed();
   }
 
   updateButtons() {

@@ -61,5 +61,11 @@ export const APP_CONFIG = {
    *   node tools/generate-level.js --level <difficulty> --count <n> --out public/levels/<difficulty>
    * A difficulty that is missing here (or 0) simply has no predefined levels.
    */
-  predefinedLevels: { 1: 5, 2: 5, 3: 5, 4: 5 }
+  predefinedLevels: { 1: 5, 2: 5, 3: 5, 4: 5 },
+  /**
+   * Random level generation. Seeds are tried in parallel in several web workers; a seed that takes longer than
+   * attemptMs is dropped (the slowest seeds can take minutes, a fresh one is usually quick). timeLimit caps each
+   * solver call, in seconds.
+   */
+  generation: { workers: 4, attemptMs: 6000, timeLimit: 3 }
 };

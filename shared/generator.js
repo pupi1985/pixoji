@@ -94,6 +94,10 @@ function assignClues(rng, B, C, o) {
 
 function tryGenerate(rng, o, log) {
   const { W, H } = o;
+  // optional wall-clock cap for this attempt (o.attemptMs, 0 = none): the game uses it so one slow seed cannot stall generation
+  const t0Attempt = Date.now();
+  const timedOut = () => o.attemptMs > 0 && Date.now() - t0Attempt > o.attemptMs;
+  const rateLimit = () => (o.attemptMs > 0 ? Math.max(0.2, Math.min(o.timeLimit, (o.attemptMs - (Date.now() - t0Attempt)) / 1000)) : o.timeLimit);
   const { B, C } = makeStructure(rng, o);
   const structCount = C.flat().filter((t) => t === CELL.CHAIN || t === CELL.MULT).length;
   const { cellVals, top, left, topVals, leftVals } = assignClues(rng, B, C, o);
@@ -103,7 +107,7 @@ function tryGenerate(rng, o, log) {
   const unique = (st) => { const r = countSolutions(build(st), 2, o.searchBudget); return r.count === 1 && !r.aborted; };
 
   // depth-0 levels are pruned with the real solver (cheap at depth 0), so clues are only dropped while direct deduction still works
-  const acceptable = (st) => (o.maxDepth === 0 ? rateSolve(build(st), { maxDepth: 0, timeLimit: o.timeLimit }).solved : unique(st));
+  const acceptable = (st) => (o.maxDepth === 0 ? rateSolve(build(st), { maxDepth: 0, timeLimit: rateLimit() }).solved : unique(st));
   const full = copy(orig);
   if (!unique(full)) { log('  full clue set is not unique, re-rolling'); return null; }
   if (o.maxDepth === 0 && !acceptable(full)) { log('  not solvable by direct deduction even with every clue, re-rolling'); return null; }
@@ -125,28 +129,30 @@ function tryGenerate(rng, o, log) {
       const cur = getV(state, s);
       if (!cur) continue;
       if (s.k === 'cell' ? nCells <= targetCells : nLines <= targetLines) continue;
+      if (timedOut()) return false;
       setV(state, s, 0);
       if (acceptable(state)) { removed.push({ s, v: cur }); if (s.k === 'cell') nCells--; else nLines--; }
       else setV(state, s, cur);
     }
+    return true;
   };
   const total = W * H;
   const dens = o.density[0] + rng() * (o.density[1] - o.density[0]);
   let T = Date.now();
-  pruneTo(Math.round(dens * total), Math.round(o.lineDensity * (W + H)));
+  if (!pruneTo(Math.round(dens * total), Math.round(o.lineDensity * (W + H)))) { log('  attempt timed out'); return null; }
   log(`  pruned to ${removed.length} removals in ${Date.now() - T}ms`);
 
-  const rate = (st) => { const t0 = Date.now(); const res = rateSolve(build(st), { maxDepth: o.maxDepth, timeLimit: o.timeLimit }); log(`  rated: solved=${res.solved} rating=${res.rating} timeout=${!!res.timeout} ${Date.now() - t0}ms`); return res; };
+  const rate = (st) => { const t0 = Date.now(); const res = rateSolve(build(st), { maxDepth: o.maxDepth, timeLimit: rateLimit() }); log(`  rated: solved=${res.solved} rating=${res.rating} timeout=${!!res.timeout} ${Date.now() - t0}ms`); return res; };
   let r = rate(state);
   if (r.solved && r.rating < o.minDepth) {            // too easy: keep removing clues
-    pruneTo(0, 0);
+    if (!pruneTo(0, 0)) { log('  attempt timed out'); return null; }
     r = rate(state);
   }
   if (!r.solved) {                                     // too hard: put clues back (monotone: more clues = easier)
     const withBack = (k) => { const st = copy(state); removed.slice().reverse().slice(0, k).forEach(({ s, v }) => setV(st, s, v)); return st; };
     let lo = 0, hi = removed.length;
     if (!rate(withBack(hi)).solved) { log('  not solvable within the depth limit even with every clue'); return null; }
-    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (rate(withBack(mid)).solved) hi = mid; else lo = mid; }
+    while (hi - lo > 1) { if (timedOut()) { log('  attempt timed out'); return null; } const mid = (lo + hi) >> 1; if (rate(withBack(mid)).solved) hi = mid; else lo = mid; }
     Object.assign(state, withBack(hi));
     r = rate(state);
   }

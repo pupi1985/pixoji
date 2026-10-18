@@ -1,4 +1,9 @@
 /* The canvas fills the visible area exactly: no margins, no scrollbars, no inline-element gap under the canvas. */
+html {
+  overscroll-behavior: none;   /* no pull-to-refresh or rubber-banding on phones */
+  touch-action: none;
+}
+
 html,
 body,
 #app {

@@ -1,12 +1,5 @@
 {
-  "defaultLevel": 7,
-  "aliases": {
-    "tutorial": 4,
-    "beginner": 5,
-    "easy": 6,
-    "medium": 7,
-    "hard": 8
-  },
+  "defaultLevel": 4,
   "levels": {
     "1": {
       "redundant": true,
@@ -14,7 +7,7 @@
       "cellClues": ["total"],
       "lineClues": [],
       "bombRatio": 0.3,
-      "density": [1, 1],
+      "density": [0.7, 0.9],
       "lineDensity": 1,
       "minDepth": 0,
       "maxDepth": 0,
@@ -22,15 +15,15 @@
       "maxChain": 2,
       "multipliers": 0,
       "maxAreaClue": 10,
-      "about": "4x4, only cell totals, every cell shows a clue"
+      "about": "4x4, only cell totals, almost all cells show clues"
     },
     "2": {
       "redundant": true,
       "size": [5, 5],
-      "cellClues": ["total"],
+      "cellClues": ["total", "chain"],
       "lineClues": ["total"],
       "bombRatio": 0.35,
-      "density": [0.95, 1],
+      "density": [0.65, 0.85],
       "lineDensity": 1,
       "minDepth": 0,
       "maxDepth": 0,
@@ -38,15 +31,15 @@
       "maxChain": 2,
       "multipliers": 0,
       "maxAreaClue": 10,
-      "about": "5x5, cell totals + row/column totals, almost every cell shows a clue"
+      "about": "5x5, cell totals + row/column totals, many cells show a clue"
     },
     "3": {
       "redundant": true,
       "size": [6, 6],
-      "cellClues": ["total", "area"],
-      "lineClues": ["total", "groups"],
+      "cellClues": ["total", "chain", "isolated"],
+      "lineClues": ["total", "longest-run"],
       "bombRatio": 0.38,
-      "density": [0.85, 1],
+      "density": [0.6, 0.8],
       "lineDensity": 1,
       "minDepth": 0,
       "maxDepth": 0,
@@ -58,9 +51,9 @@
     },
     "4": {
       "size": [8, 8],
-      "cellClues": ["total", "isolated", "surrounded", "area"],
-      "lineClues": ["total", "longest-run", "groups"],
-      "density": [0.7, 0.85],
+      "cellClues": ["total", "chain", "isolated", "surrounded"],
+      "lineClues": ["total", "longest-run"],
+      "density": [0.55, 0.75],
       "lineDensity": 1,
       "minDepth": 0,
       "maxDepth": 0,
@@ -68,11 +61,11 @@
       "maxChain": 2,
       "multipliers": 0,
       "maxAreaClue": 10,
-      "about": "8x8, all number clues, no chains or multipliers, direct deductions only"
+      "about": "8x8, all number clues, no chains/x2, direct deductions only"
     },
     "5": {
       "size": [8, 8],
-      "cellClues": ["total", "isolated", "surrounded", "area", "chain"],
+      "cellClues": ["total", "chain", "isolated", "surrounded", "area"],
       "lineClues": ["total", "longest-run", "groups"],
       "density": [0.5, 0.65],
       "lineDensity": 0.9,
@@ -86,7 +79,7 @@
     },
     "6": {
       "size": [8, 8],
-      "cellClues": ["total", "isolated", "surrounded", "area", "chain", "multiplier"],
+      "cellClues": ["total", "chain", "isolated", "surrounded", "area", "multiplier"],
       "lineClues": ["total", "longest-run", "groups"],
       "density": [0.4, 0.5],
       "lineDensity": 0.85,
@@ -100,7 +93,7 @@
     },
     "7": {
       "size": [8, 8],
-      "cellClues": ["total", "isolated", "surrounded", "area", "chain", "multiplier"],
+      "cellClues": ["total", "isolated", "surrounded"],
       "lineClues": ["total", "longest-run", "groups"],
       "density": [0.28, 0.36],
       "lineDensity": 0.65,
@@ -114,7 +107,7 @@
     },
     "8": {
       "size": [8, 8],
-      "cellClues": ["total", "isolated", "surrounded", "area", "chain", "multiplier"],
+      "cellClues": ["total", "isolated", "surrounded"],
       "lineClues": ["total", "longest-run", "groups"],
       "density": [0.15, 0.2],
       "lineDensity": 0.5,
@@ -128,7 +121,7 @@
     },
     "9": {
       "size": [8, 8],
-      "cellClues": ["total", "isolated", "surrounded", "area", "chain", "multiplier"],
+      "cellClues": ["total", "isolated", "surrounded"],
       "lineClues": ["total", "longest-run", "groups"],
       "density": [0.1, 0.15],
       "lineDensity": 0.35,
