@@ -1,0 +1,19 @@
+{
+  "name": "pixi-button-grid",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "generate": "node tools/generate-level.js",
+    "solve": "node tools/solver.js"
+  },
+  "dependencies": {
+    "pixi.js": "^8.8.1"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

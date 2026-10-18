@@ -1,0 +1,30 @@
+/* The canvas fills the visible area exactly: no margins, no scrollbars, no inline-element gap under the canvas. */
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #20212a;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  touch-action: none;   /* the game handles taps and drags itself: no page scroll, pull-to-refresh or double-tap zoom */
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}
