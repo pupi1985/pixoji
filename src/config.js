@@ -50,18 +50,13 @@ export const UI_CONFIG = {
   resetColor: 0xc0392b,
   navColor: 0x32105f,
   navHoverColor: 0x67449a,
+  // tutorial highlight roles (shared/tutorial.js HIGHLIGHT_STYLES): primary = what is being explained, secondary = related cells
+  tutorialColors: { primary: 0xffc400, secondary: 0x2fb5ff, bomb: 0xff5a5a, safe: 0x5ee07a },
   dialog: { overlayAlpha: 0.65, panelColor: 0x2b2d3a, borderColor: 0x67449a, maxWidth: 340 }
 };
 
 export const APP_CONFIG = {
   showBombs: false,
-  /**
-   * Predefined levels available per difficulty (the difficulties themselves come from shared/presets.json).
-   * Files live in public/levels/<difficulty>/level<N>.json, N = 1..count; create them with
-   *   node tools/generate-level.js --level <difficulty> --count <n> --out public/levels/<difficulty>
-   * A difficulty that is missing here (or 0) simply has no predefined levels.
-   */
-  predefinedLevels: { 1: 5, 2: 5, 3: 5, 4: 5 },
   /**
    * Random level generation: seeds are tried in parallel in up to `workers` web workers. The effort limits that decide
    * which seeds work live in the "generation" block of shared/presets.json (shared with the command line tools, so a

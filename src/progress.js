@@ -1,9 +1,10 @@
 /**
- * Completed-level tracking. Stored in localStorage as a JSON array of "category/level" keys;
- * falls back to memory (for this session only) if localStorage is unavailable (private mode, blocked, ...).
+ * Completed predefined levels, remembered across sessions in localStorage ("completedLevels").
+ * Levels are identified by their content id (see shared/level-index.js), so ticks stay on the right level when levels are
+ * added, removed or reordered, and a level that was changed on purpose (new id) starts as not completed.
+ * Falls back to memory if localStorage is unavailable.
  */
 const STORAGE_KEY = 'completedLevels';
-const keyOf = (category, level) => `${category}/${level}`;
 
 let completed = new Set();
 try {
@@ -12,11 +13,10 @@ try {
   if (Array.isArray(parsed)) completed = new Set(parsed.filter((k) => typeof k === 'string'));
 } catch (e) { /* unavailable or corrupted: start empty */ }
 
-export const isLevelCompleted = (category, level) => completed.has(keyOf(category, level));
+export const isLevelCompleted = (levelId) => completed.has(levelId);
 
-export function markLevelCompleted(category, level) {
-  const k = keyOf(category, level);
-  if (completed.has(k)) return;
-  completed.add(k);
+export function markLevelCompleted(levelId) {
+  if (completed.has(levelId)) return;
+  completed.add(levelId);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...completed])); } catch (e) { /* kept in memory only */ }
 }

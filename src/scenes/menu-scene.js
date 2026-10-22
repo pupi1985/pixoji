@@ -1,8 +1,9 @@
 import { Container, Graphics, Rectangle, Text } from 'pixi.js';
-import { APP_CONFIG, GRID_CONFIG, UI_CONFIG } from '../config.js';
+import { GRID_CONFIG, UI_CONFIG } from '../config.js';
 import { PRESETS, DIFFICULTIES } from '../game/presets.js';
 import { isLevelCompleted } from '../progress.js';
 import { createTextButton } from '../ui/widgets.js';
+import { APP_VERSION, BUILD_DATE } from '../version.js';
 
 const gap = 16;
 
@@ -16,7 +17,7 @@ function makeText(text, { size = 16, fill = 0xffffff, bold = true, wrapWidth = 0
 }
 
 /** A rounded tile with a main label and a small caption. */
-function makeTile({ width, height, label, caption, labelSize = 26, enabled = true, onTap }) {
+function makeTile({ width, height, label, caption, labelSize = 26, enabled = true, dim = false, onTap }) {
   const tile = new Container();
   const bg = new Graphics();
   const paint = (c) => bg.clear().roundRect(0, 0, width, height, 12).fill({ color: c });
@@ -36,9 +37,8 @@ function makeTile({ width, height, label, caption, labelSize = 26, enabled = tru
     tile.on('pointerover', (e) => { if (e.pointerType === 'mouse') paint(GRID_CONFIG.cell.darkTopLeft); });
     tile.on('pointerout', () => paint(GRID_CONFIG.cell.darkFace));
     tile.on('pointertap', () => onTap?.());
-  } else {
-    tile.alpha = 0.4;
   }
+  tile.alpha = !enabled ? 0.4 : dim ? 0.6 : 1;
   return tile;
 }
 
@@ -50,21 +50,55 @@ function makeTick(x, y) {
   return tick;
 }
 
+/** Small "?" badge: the level has a tutorial. */
+function makeTutorialBadge(x, y) {
+  const badge = new Container();
+  badge.addChild(new Graphics().circle(x, y, 12).fill({ color: 0xe0a100 }).stroke({ color: 0xffffff, width: 1.5 }));
+  const mark = new Text({ text: '?', style: { fontFamily: 'Arial', fontSize: 16, fontWeight: 'bold', fill: 0xffffff } });
+  mark.anchor.set(0.5);
+  mark.position.set(x, y + 0.5);
+  badge.addChild(mark);
+  return badge;
+}
+
+/** Small "download" badge: the level is not on this device yet. */
+function makeDownloadBadge(x, y) {
+  const badge = new Graphics();
+  badge.circle(x, y, 11).fill({ color: 0x4a5a80 }).stroke({ color: 0xffffff, width: 1.5 });
+  badge.moveTo(x, y - 5).lineTo(x, y + 4).stroke({ color: 0xffffff, width: 2.2, cap: 'round' });
+  badge.moveTo(x - 4, y).lineTo(x, y + 4.5).lineTo(x + 4, y).stroke({ color: 0xffffff, width: 2.2, cap: 'round', join: 'round' });
+  return badge;
+}
+
+const STATUS_TEXT = {
+  loading: 'checking for new levels…',
+  online: 'level list up to date',
+  saved: 'offline: using the saved level list',
+  none: 'no level list yet: connect once to get the predefined levels',
+};
+
 /**
- * Menu flow: mode (predefined / random) -> difficulty -> (predefined only) level. The 'loading' view is shown while
- * a random level is being generated and 'message' reports errors.
+ * Menu flow: mode (predefined / random) -> difficulty -> (predefined only) level. The 'busy' view is shown while a random
+ * level is generated or levels are downloaded, and 'message' reports problems.
  */
 export class MenuScene extends Container {
-  /** callbacks: { onPlayPredefined(difficulty, number), onPlayRandom(difficulty), onCancelGeneration(), onNavigate(state) } */
-  constructor(callbacks) {
+  /**
+   * callbacks: { onPlayPredefined(difficulty, entry, number), onPlayRandom(difficulty), onDownload(items), onCancelGeneration(),
+   *              onCancelDownload(), onApplyUpdate(), onNavigate(state) }
+   * catalog: the LevelCatalog (list of predefined levels and which ones are saved on this device)
+   */
+  constructor(callbacks, catalog) {
     super();
     this.callbacks = callbacks;
+    this.catalog = catalog;
     this.view = 'mode';
     this.mode = null;          // 'predefined' | 'random'
     this.difficulty = null;
-    this.loadingText = '';
-    this.loadingLabel = null;
+    this.busy = null;          // { title, subtitle, text, note, onCancel }
+    this.busyLabel = null;
+    this.returnView = 'difficulty';
     this.message = '';
+    this.applyUpdate = null;   // set when a new version of the app is ready
     this.size = { w: 800, h: 600 };
   }
 
@@ -73,13 +107,13 @@ export class MenuScene extends Container {
     this.render();
   }
 
-  /** Redraws the current view (e.g. after coming back from a level, so new ticks appear). */
+  /** Redraws the current view (new ticks after a level, new status after the level list arrived, ...). */
   refresh() { this.render(); }
 
   go(view) {
     this.view = view;
     this.render();
-    if (view !== 'loading' && view !== 'message') this.callbacks.onNavigate?.({ view, mode: this.mode, difficulty: this.difficulty });
+    if (view !== 'busy' && view !== 'message') this.callbacks.onNavigate?.({ view, mode: this.mode, difficulty: this.difficulty });
   }
 
   /** Restores where the player was in the menus (from a previous visit); ignores anything invalid. */
@@ -91,19 +125,46 @@ export class MenuScene extends Container {
     else if (state.view === 'difficulty' || state.view === 'levels') this.view = 'difficulty';
   }
 
+  setUpdateAvailable(apply) {
+    this.applyUpdate = apply;
+    this.render();
+  }
+
+  // ------------------------------------------------------------------ busy screens
+
+  startBusy(busy) {
+    if (this.view !== 'busy') this.returnView = this.view === 'message' ? 'difficulty' : this.view;
+    this.busy = busy;
+    this.go('busy');
+  }
+
   showLoading(difficulty) {
     this.mode = 'random';
     this.difficulty = difficulty;
-    this.loadingText = 'Generating a level…';
-    this.go('loading');
+    this.startBusy({
+      title: 'GENERATING LEVEL', subtitle: `Difficulty ${difficulty}`, text: 'Generating a level…',
+      note: PRESETS.levels[difficulty].depth[1] >= 2 ? 'This difficulty can take several minutes. Predefined levels start instantly.' : 'Higher difficulties can take a while.',
+      onCancel: () => this.callbacks.onCancelGeneration?.(),
+    });
   }
 
-  /** The generated level is about to be played: coming back to the menu must show the difficulty list again. */
-  finishLoading() { this.view = 'difficulty'; }
+  showDownloading(total) {
+    this.startBusy({
+      title: 'DOWNLOADING LEVELS', subtitle: '', text: `0 / ${total}`,
+      note: 'They are saved on this device, so you can play them without a connection.',
+      onCancel: () => this.callbacks.onCancelDownload?.(),
+    });
+  }
 
-  setLoadingText(text) {
-    this.loadingText = text;
-    if (this.loadingLabel) this.loadingLabel.text = text;
+  setBusyText(text) {
+    if (this.busy) this.busy.text = text;
+    if (this.busyLabel) this.busyLabel.text = text;
+  }
+
+  /** The job is over: coming back to the menu shows the screen the player started it from (drawn only if `show`). */
+  endBusy({ show = false } = {}) {
+    this.busy = null;
+    if (this.view === 'busy') { if (show) this.go(this.returnView); else this.view = this.returnView; }
   }
 
   showMessage(text) {
@@ -123,13 +184,14 @@ export class MenuScene extends Container {
     // removed now, destroyed once the current event (often the tap that triggered this redraw) has finished
     const old = this.removeChildren();
     queueMicrotask(() => old.forEach((child) => child.destroy({ children: true })));
-    this.loadingLabel = null;
+    this.busyLabel = null;
     const { w, h } = this.size;
     if (this.view === 'mode') this.drawMode(w, h);
     else if (this.view === 'difficulty') this.drawDifficulties(w, h);
     else if (this.view === 'levels') this.drawLevels(w, h);
-    else if (this.view === 'loading') this.drawLoading(w, h);
+    else if (this.view === 'busy') this.drawBusy(w, h);
     else this.drawMessage(w, h);
+    if (this.view !== 'busy') this.drawFooter(w, h);
   }
 
   addBackButton(label = '← Back', onTap = () => this.back()) {
@@ -145,14 +207,27 @@ export class MenuScene extends Container {
     return title;
   }
 
+  /** Bottom of every menu screen: the "update available" button, and the app version + state of the level list. */
+  drawFooter(w, h) {
+    const status = STATUS_TEXT[this.catalog.status] ?? '';
+    const label = makeText(`v${APP_VERSION}${BUILD_DATE ? ` · ${BUILD_DATE}` : ''}  ·  ${status}`, { size: 12, bold: false, fill: 0x8e91a3, wrapWidth: w - 24 });
+    label.position.set(w / 2, h - label.height - 8);
+    this.addChild(label);
+    if (this.applyUpdate) {
+      const btn = createTextButton({ label: '⟳  Update available - tap to restart', width: Math.min(300, w - 24), color: 0x16a085, hoverColor: 0x1abc9c, onTap: () => { this.callbacks.onApplyUpdate?.(); this.applyUpdate?.(); } });
+      btn.position.set(Math.floor((w - Math.min(300, w - 24)) / 2), label.y - 12 - UI_CONFIG.buttonSize);
+      this.addChild(btn);
+    }
+  }
+
   drawMode(w, h) {
     const cw = Math.min(320, w - 40), ch = 96;
     const titleH = 40, blockH = titleH + 24 + 2 * ch + gap;
-    const top = Math.max(20, Math.floor((h - blockH) / 2));
+    const top = Math.max(20, Math.floor((h - blockH) / 2) - 20);
     this.addTitle('SELECT MODE', w, top, 32);
     const options = [
-      { label: 'PREDEFINED LEVELS', caption: 'Play the levels stored in the game', mode: 'predefined' },
-      { label: 'RANDOM LEVEL', caption: 'A new level is generated for you', mode: 'random' },
+      { label: 'PREDEFINED LEVELS', caption: 'Hand-picked levels, saved on your device', mode: 'predefined' },
+      { label: 'RANDOM LEVEL', caption: 'A new level is generated for you, works offline', mode: 'random' },
     ];
     options.forEach((o, i) => {
       const tile = makeTile({ width: cw, height: ch, label: o.label, caption: o.caption, labelSize: 21, onTap: () => { this.mode = o.mode; this.go('difficulty'); } });
@@ -166,19 +241,31 @@ export class MenuScene extends Container {
     const cols = Math.max(1, Math.min(count, maxCols, Math.floor((w - 32 + gap) / (64 + gap))));
     const rows = Math.ceil(count / cols);
     const byW = Math.floor((w - 32 - (cols - 1) * gap) / cols);
-    const byH = Math.floor((h - 170 - (rows - 1) * gap) / rows);
+    const byH = Math.floor((h - 230 - (rows - 1) * gap) / rows);
     const size = Math.max(52, Math.min(88, byW, byH));
     return { cols, rows, size };
   }
 
+  /** Places the tiles centred below the title; returns the y of the bottom edge of the block. */
   placeTiles(tiles, { cols, rows, size }, w, h, titleBottom) {
     const totalW = cols * size + (cols - 1) * gap, totalH = rows * size + (rows - 1) * gap;
     const startX = Math.floor((w - totalW) / 2);
-    const startY = Math.max(titleBottom + 24, Math.floor((h + titleBottom - totalH) / 2));
+    const startY = Math.max(titleBottom + 24, Math.floor((h + titleBottom - totalH) / 2) - 30);
     tiles.forEach((tile, i) => {
       tile.position.set(startX + (i % cols) * (size + gap), startY + Math.floor(i / cols) * (size + gap));
       this.addChild(tile);
     });
+    return startY + totalH;
+  }
+
+  /** "Download ..." button under the tiles when some of `items` are not saved on this device yet and a connection exists. */
+  addDownloadButton(items, label, w, y) {
+    const missing = items.filter((it) => !this.catalog.isDownloaded(it.entry));
+    if (!missing.length || !this.catalog.canSaveLevels || this.catalog.status !== 'online') return;
+    const width = Math.min(300, w - 40);
+    const btn = createTextButton({ label: `${label} (${missing.length})`, width, color: 0x4a5a80, hoverColor: 0x6178a8, fontSize: 15, onTap: () => this.callbacks.onDownload?.(missing) });
+    btn.position.set(Math.floor((w - width) / 2), y + 22);
+    this.addChild(btn);
   }
 
   drawDifficulties(w, h) {
@@ -187,15 +274,11 @@ export class MenuScene extends Container {
     const layout = this.tileLayout(DIFFICULTIES.length, w, h, 5);
     const tiles = DIFFICULTIES.map((d) => {
       const [pw, ph] = PRESETS.levels[d].size;
-      const count = APP_CONFIG.predefinedLevels[d] ?? 0;
       let caption = `${pw}×${ph}`, enabled = true;
       if (this.mode === 'predefined') {
-        if (count === 0) { caption = 'no levels'; enabled = false; }
-        else {
-          let done = 0;
-          for (let n = 1; n <= count; n++) if (isLevelCompleted(d, n)) done++;
-          caption = `${done}/${count} done`;
-        }
+        const entries = this.catalog.entries(d);
+        if (!entries.length) { caption = this.catalog.status === 'loading' ? '…' : 'no levels'; enabled = false; }
+        else caption = `${entries.filter((e) => isLevelCompleted(e.id)).length}/${entries.length} done`;
       }
       return makeTile({
         width: layout.size, height: layout.size, label: `${d}`, caption, enabled,
@@ -206,49 +289,54 @@ export class MenuScene extends Container {
         },
       });
     });
-    this.placeTiles(tiles, layout, w, h, title.y + title.height);
+    const bottom = this.placeTiles(tiles, layout, w, h, title.y + title.height);
+    if (this.mode === 'predefined') this.addDownloadButton(this.catalog.items(), 'Download all levels', w, bottom);
   }
 
   drawLevels(w, h) {
     this.addBackButton();
     const title = this.addTitle(`DIFFICULTY ${this.difficulty} · LEVELS`, w, 66, 26);
-    const count = APP_CONFIG.predefinedLevels[this.difficulty] ?? 0;
-    const layout = this.tileLayout(count, w, h, 5);
-    const tiles = [];
-    for (let n = 1; n <= count; n++) {
+    const entries = this.catalog.entries(this.difficulty);
+    const layout = this.tileLayout(entries.length, w, h, 5);
+    const offline = this.catalog.status !== 'online';
+    const tiles = entries.map((entry, i) => {
+      const saved = this.catalog.isDownloaded(entry);
       const tile = makeTile({
-        width: layout.size, height: layout.size, label: `${n}`, labelSize: 24,
-        onTap: () => this.callbacks.onPlayPredefined?.(this.difficulty, n),
+        width: layout.size, height: layout.size, label: `${i + 1}`, labelSize: 24, dim: !saved && offline,
+        onTap: () => this.callbacks.onPlayPredefined?.(this.difficulty, entry, i + 1),
       });
-      // completed levels get a tick; they can still be replayed any time
-      if (isLevelCompleted(this.difficulty, n)) tile.addChild(makeTick(layout.size - 16, 16));
-      tiles.push(tile);
-    }
-    this.placeTiles(tiles, layout, w, h, title.y + title.height);
+      // completed levels get a tick, levels with a tutorial a "?", levels not saved on this device yet a download badge
+      if (isLevelCompleted(entry.id)) tile.addChild(makeTick(layout.size - 16, 16));
+      if (entry.tutorial) tile.addChild(makeTutorialBadge(16, 16));
+      if (!saved && this.catalog.canSaveLevels) tile.addChild(makeDownloadBadge(layout.size - 15, layout.size - 15));
+      return tile;
+    });
+    const bottom = this.placeTiles(tiles, layout, w, h, title.y + title.height);
+    this.addDownloadButton(this.catalog.items(this.difficulty), 'Download these levels', w, bottom);
   }
 
-  drawLoading(w, h) {
+  drawBusy(w, h) {
+    const b = this.busy ?? { title: '', subtitle: '', text: '', note: '' };
     const top = Math.floor(h / 2) - 90;
-    this.addTitle('GENERATING LEVEL', w, top, 28);
-    this.addTitle(`Difficulty ${this.difficulty}`, w, top + 44, 20);
-    this.loadingLabel = makeText(this.loadingText, { size: 16, bold: false, fill: 0xd0d2d9 });
-    this.loadingLabel.position.set(w / 2, top + 84);
-    const hard = PRESETS.levels[this.difficulty].depth[1] >= 2;
-    const note = makeText(hard ? 'This difficulty can take several minutes. Predefined levels start instantly.' : 'Higher difficulties can take a while.', { size: 14, bold: false, fill: 0x9a9db0, wrapWidth: Math.min(380, w - 40) });
+    this.addTitle(b.title, w, top, 28);
+    if (b.subtitle) this.addTitle(b.subtitle, w, top + 44, 20);
+    this.busyLabel = makeText(b.text, { size: 16, bold: false, fill: 0xd0d2d9, wrapWidth: w - 40 });
+    this.busyLabel.position.set(w / 2, top + 84);
+    const note = makeText(b.note, { size: 14, bold: false, fill: 0x9a9db0, wrapWidth: Math.min(380, w - 40) });
     note.position.set(w / 2, top + 112);
-    this.addChild(this.loadingLabel, note);
+    this.addChild(this.busyLabel, note);
     const cancel = createTextButton({
       label: 'Cancel', width: 140, color: UI_CONFIG.resetColor,
-      onTap: () => { this.callbacks.onCancelGeneration?.(); this.go('difficulty'); },
+      onTap: () => { b.onCancel?.(); this.endBusy({ show: true }); },
     });
-    cancel.position.set(Math.floor((w - 140) / 2), top + 160);
+    cancel.position.set(Math.floor((w - 140) / 2), top + 168);
     this.addChild(cancel);
   }
 
   drawMessage(w, h) {
     this.addBackButton();
     const text = makeText(this.message, { size: 18, bold: false, wrapWidth: Math.min(420, w - 40) });
-    text.position.set(w / 2, Math.floor(h / 2) - 40);
+    text.position.set(w / 2, Math.floor(h / 2) - 60);
     this.addChild(text);
   }
 }

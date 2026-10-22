@@ -15,6 +15,13 @@ import { normalizeWeights } from '../shared/clue-types.js';
 
 const normalizeForCheck = (obj, names, all, what) => normalizeWeights(obj, names, all, what);
 
+/** Next free file name in a directory: 01.json, 02.json, ... (two digits, zero-padded; three once past 99). */
+function nextLevelFile(dir) {
+  let max = 0;
+  try { for (const f of fs.readdirSync(dir)) { const m = /^(\d+)\.json$/.exec(f); if (m) max = Math.max(max, Number(m[1])); } } catch { /* new directory */ }
+  return `${String(max + 1).padStart(2, '0')}.json`;
+}
+
 export const DEFAULT_PRESETS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'shared', 'presets.json');
 
 export function loadPresets(file = DEFAULT_PRESETS_FILE) {
@@ -40,9 +47,8 @@ const SPECS = [
   { name: 'chain-clue-max-size', type: 'int', arg: 'N', def: 'by level', min: 2, max: 12, desc: 'Largest number of cells in one chain; chains get a random size between 2 and this value. How many chain cells a level has comes from the chain weight in --cell-clues.' },
   { name: 'bombs', type: 'string', arg: 'A-B', def: 'by level', desc: 'Fraction of the cells that are bombs, as a range such as 0.35-0.5 or a single value. Each level draws a random value inside the range. Around 35-50% gives the most interesting levels.' },
 
-  { group: 'Output', name: 'out', type: 'string', arg: 'PATH', def: 'print to stdout', desc: 'A file name ending in .json, or a directory (created if needed) in which level<N>.json files are written. The game loads predefined levels from public/levels/<difficulty>/level<N>.json, so for difficulty 3 use --out public/levels/3 (and --start to append).' },
+  { group: 'Output', name: 'out', type: 'string', arg: 'PATH', def: 'print to stdout', desc: 'A file name ending in .json, or a directory (created if needed) in which numbered files 01.json, 02.json, ... are written, continuing after the ones already there. Your levels live in levels/<difficulty>/ (so for difficulty 3: --out levels/3); they are never modified by the build, which publishes them with npm run levels.' },
   { name: 'count', type: 'int', arg: 'N', def: '1', min: 1, max: 1000, desc: 'How many levels to generate. Level i uses the next seed that works after level i-1, so a batch is reproducible.' },
-  { name: 'start', type: 'int', arg: 'N', def: '1', min: 0, desc: 'Number of the first file when --out is a directory (level<start>.json, level<start+1>.json, ...). Use it to append levels without overwriting.' },
   { name: 'seed', type: 'int', arg: 'N', def: 'random', min: 0, desc: 'First seed to try. Generation is deterministic: the same seed + the same options always give the same level (the game shows the seed of random levels). If a seed gives no level the next one is tried; the seed used is printed and stored in the file.' },
   { name: 'max-seeds', type: 'int', arg: 'N', def: '2000', min: 1, desc: 'How many seeds to try for one level before giving up.' },
   { name: 'redundant', type: 'flag', desc: 'Allow neighbouring cells to show identical clues (same type and value). Normally avoided because it adds no information; levels 1-3 allow it, so every cell can carry a clue.' },
@@ -69,8 +75,8 @@ function usageText(presets) {
     ],
     examples: [
       'node tools/generate-level.js --level 4 --cell-clues neighbor --line-clues count --out tutorial.json',
-      'node tools/generate-level.js --level 6 --count 5 --out public/levels/6 --seed 100',
-      'node tools/generate-level.js --level 6 --count 3 --start 6 --out public/levels/6   # appends level6..8.json',
+      'node tools/generate-level.js --level 6 --count 5 --out levels/6 --seed 100',
+      'node tools/generate-level.js --level 6 --count 3 --out levels/6   # adds 3 more levels (01.json, 02.json, ...); npm run levels publishes them',
       'node tools/generate-level.js --width 6 --height 6 --level 7 --cell-clues neighbor=40,area=20-30,chain=0-10 --line-clues count=50,groups=25',
       'node tools/generate-level.js --width 8 --height 8 --depth 2 --cell-clues-density 0.2-0.25 --bombs 0.4-0.5 --out hard1.json',
       'node tools/generate-level.js --level 4 --seed 123456789   # exactly the level the game shows for "Seed: 123456789" at difficulty 4',
@@ -128,7 +134,7 @@ function main() {
 
   const o = buildOptions(p, level, ov, presets.generation);
   let seed = a.seed ?? Date.now() % 1e9;
-  const count = a.count ?? 1, start = a.start ?? 1, maxSeeds = a['max-seeds'] ?? 2000;
+  const count = a.count ?? 1, maxSeeds = a['max-seeds'] ?? 2000;
   const log = a.verbose ? (s) => console.error(s) : () => {};
   const out = a.out;
   for (let i = 0; i < count; i++) {
@@ -139,7 +145,7 @@ function main() {
     const text = toJson(lv, a['no-meta'] ? null : lv.meta);
     seed++;   // the next level starts after this one
     if (!out) { process.stdout.write(text); continue; }
-    const file = out.endsWith('.json') ? out : path.join(out, `level${start + i}.json`);
+    const file = out.endsWith('.json') ? out : path.join(out, nextLevelFile(out));
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, text);
     console.error(`wrote ${file}  seed=${lv.meta.seed} (${tried} tried)  rating=${lv.meta.rating} (hypothesis depth), steps=${lv.meta.steps}, cell clue density=${lv.meta.clueDensity}, work=${lv.meta.work}, ${((Date.now() - t0) / 1000).toFixed(1)}s`);

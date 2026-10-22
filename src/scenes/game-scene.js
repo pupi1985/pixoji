@@ -1,7 +1,11 @@
-import { Container, Rectangle, Text } from 'pixi.js';
+import { Container, Graphics, Rectangle, Text } from 'pixi.js';
 import { ButtonGrid } from '../game/grid.js';
 import { History } from '../game/history.js';
+import { createTutorial } from '../game/tutorial.js';
+import { drawHighlights } from '../game/tutorial-highlights.js';
+import { marksUpTo, untilMet } from '../../shared/tutorial.js';
 import { ConfirmDialog, createIconButton, createTextButton, drawCircularArrow } from '../ui/widgets.js';
+import { TutorialPanel } from '../ui/tutorial-panel.js';
 import { UI_CONFIG } from '../config.js';
 
 const IDLE_DRAG = () => ({ active: false, state: null, changes: null });
@@ -14,6 +18,9 @@ const IDLE_DRAG = () => ({ active: false, state: null, changes: null });
  *  - touch (phones, tablets): there is no right click, so every tap cycles empty -> bomb -> pressed -> empty;
  *    dragging paints the state the first cell moved to.
  * Cells linked by a chain (clue 4) always change together.
+ *
+ * A level may carry a tutorial (shared/tutorial.js): while a "say" step is shown the board is locked and a tap anywhere
+ * continues; "play" steps unlock it. The text box has back / next / skip, and the highlight is drawn over the board.
  */
 export class GameScene extends Container {
   /** callbacks: { onExit(), onWin(session), onChange(snapshot) } - onChange fires after every change worth saving */
@@ -27,12 +34,22 @@ export class GameScene extends Container {
     this.hasWon = false;
     this.drag = IDLE_DRAG();
     this.size = { w: 0, h: 0 };
+    this.tutorial = null;            // the running tutorial, if any
+    this.levelHasTutorial = false;
+    this.pendingTutorialMarks = false;
 
     this.eventMode = 'static';
     this.grid = new ButtonGrid();
+    this.highlights = new Graphics();
+    this.highlights.eventMode = 'none';
+    this.catcher = new Container();  // covers the board during locked tutorial steps: a tap anywhere continues
+    this.catcher.eventMode = 'static';
+    this.catcher.visible = false;
+    this.catcher.on('pointertap', () => this.tutorialNext());
+    this.panel = new TutorialPanel({ onBack: () => this.tutorialBack(), onNext: () => this.tutorialNext(), onSkip: () => this.tutorialSkip() });
     this.hud = new Container();
     this.dialog = new ConfirmDialog();
-    this.addChild(this.grid, this.hud, this.dialog);
+    this.addChild(this.grid, this.highlights, this.catcher, this.hud, this.panel, this.dialog);
 
     this.backBtn = createTextButton({ label: '← Menu', width: 96, color: UI_CONFIG.navColor, hoverColor: UI_CONFIG.navHoverColor, onTap: () => this.callbacks.onExit?.() });
     this.undoBtn = createIconButton({
@@ -76,6 +93,12 @@ export class GameScene extends Container {
     this.winText.visible = this.hasWon;
     this.drag = IDLE_DRAG();
     this.dialog.close();
+    this.levelHasTutorial = !!levelData.tutorial;
+    this.tutorial = null;
+    if (this.levelHasTutorial && !this.hasWon && !saved?.tutorial?.finished) {
+      this.tutorial = createTutorial(levelData, saved?.tutorial?.step ?? 0);
+      this.pendingTutorialMarks = !!this.tutorial && !saved;   // the first step's example marks are applied once the cells exist
+    }
     window.addEventListener('keydown', this.onKeyDown);
     this.updateButtons();
   }
@@ -85,6 +108,7 @@ export class GameScene extends Container {
     return {
       v: 1, session: this.session, title: this.title, levelData: this.levelData, cellStates: this.cellStates,
       undoStack: this.history.undoStack.slice(-200), redoStack: this.history.redoStack.slice(-200), hasWon: this.hasWon,
+      tutorial: this.levelHasTutorial ? (this.tutorial && !this.tutorial.finished ? { step: this.tutorial.index } : { finished: true }) : null,
     };
   }
 
@@ -124,21 +148,105 @@ export class GameScene extends Container {
     this.winText.position.set(Math.floor((w - winW * wk) / 2), Math.floor(h - bottomHeight + (bottomHeight - this.winText.height) / 2));
 
     this.dialog.resize(w, h);
+    this.panel.resize(w, h, this.panelHeight());
     if (this.levelData) this.buildGrid();
   }
 
+  /** Height of the tutorial text box (it takes the place of the "level cleared" strip while a tutorial runs). */
+  panelHeight() { return Math.round(Math.min(230, Math.max(140, this.size.h * 0.27))); }
+
+  tutorialActive() { return !!this.tutorial && !this.tutorial.finished; }
+
+  /** True while a locked tutorial step is on: the board must not react. */
+  get locked() { return this.tutorialActive() && this.tutorial.blocking; }
+
   buildGrid() {
     const { w, h } = this.size;
-    const region = { x: 0, y: UI_CONFIG.hudHeight, width: w, height: Math.max(1, h - UI_CONFIG.hudHeight - UI_CONFIG.bottomHeight) };
+    const bottom = this.tutorialActive() ? this.panelHeight() : UI_CONFIG.bottomHeight;
+    const region = { x: 0, y: UI_CONFIG.hudHeight, width: w, height: Math.max(1, h - UI_CONFIG.hudHeight - bottom) };
     const { height: rows, width: cols } = this.levelData.grid;
     this.grid.rebuild(region, rows, cols, this.levelData, (cell, event) => this.onCellDown(cell, event));
     this.grid.cells.forEach((cell) => { if (this.cellStates[cell.index]) cell.setState(this.cellStates[cell.index]); });
+    if (this.pendingTutorialMarks) { this.pendingTutorialMarks = false; this.applyMarks(marksUpTo(this.tutorial.steps, this.tutorial.index)); }
+    this.refreshTutorialUi();
+  }
+
+  // ------------------------------------------------------------------ tutorial
+
+  /** Shows / hides the text box, the highlight and the "tap to continue" layer to match the current step. */
+  refreshTutorialUi() {
+    const t = this.tutorial, { w, h } = this.size;
+    if (!this.tutorialActive()) {
+      this.panel.hide();
+      this.catcher.visible = false;
+      this.highlights.clear();
+      return;
+    }
+    const panelH = this.panelHeight();
+    this.catcher.hitArea = new Rectangle(0, UI_CONFIG.hudHeight, w, Math.max(1, h - UI_CONFIG.hudHeight - panelH));
+    this.catcher.visible = t.blocking;
+    this.panel.resize(w, h, panelH);
+    this.panel.show({ text: t.step.text, index: t.index, count: t.count, canGoBack: t.canGoBack, showNext: t.hasNextButton, last: t.index === t.count - 1 });
+    drawHighlights(this.highlights, t.step.highlight, this.grid.layoutInfo, this.levelData);
+  }
+
+  /** Sets cells to the given [{ r, c, state }] without recording undo history (chains move together). */
+  applyMarks(marks) {
+    for (const { r, c, state } of marks) {
+      const cell = this.grid.cells2D[r]?.[c];
+      if (cell) this.applyToCell(cell, state);
+    }
+  }
+
+  /** Shows the step the tutorial has just moved to (applying its example marks when moving forward). */
+  enterTutorialStep(forward = true) {
+    const t = this.tutorial;
+    if (forward) this.applyMarks(marksUpTo([t.step], 0));
+    this.refreshTutorialUi();
+    this.updateButtons();
+    this.changed();
+  }
+
+  advanceTutorial() {
+    if (this.tutorial.next()) this.enterTutorialStep(true);
+    else this.finishTutorial();
+  }
+
+  tutorialNext() {
+    if (!this.tutorialActive() || this.dialog.visible || !this.tutorial.hasNextButton) return;
+    this.advanceTutorial();
+  }
+
+  /** One step back: the board returns to how the tutorial itself left it before that step (the player's own moves are dropped). */
+  tutorialBack() {
+    if (!this.tutorialActive() || this.dialog.visible || !this.tutorial.back()) return;
+    this.endGesture();
+    for (const cell of this.grid.cells) this.setCellState(cell, 0);
+    this.applyMarks(marksUpTo(this.tutorial.steps, this.tutorial.index));
+    this.history.clear();
+    this.enterTutorialStep(false);
+  }
+
+  tutorialSkip() {
+    if (this.tutorialActive() && !this.dialog.visible) this.finishTutorial();
+  }
+
+  finishTutorial() {
+    this.tutorial.finished = true;
+    this.layout(this.size.w, this.size.h);   // the board grows back into the space the text box used
+    this.updateButtons();
+    this.changed();
+  }
+
+  /** A "play" step with an { bombs, safe } condition ends as soon as the board matches it. */
+  checkTutorialProgress() {
+    if (this.tutorialActive() && untilMet(this.tutorial.step, this.cellStates, this.levelData.grid.width)) this.advanceTutorial();
   }
 
   // ------------------------------------------------------------------ input
 
   onCellDown(cell, event) {
-    if (this.hasWon || this.dialog.visible) return;
+    if (this.hasWon || this.dialog.visible || this.locked) return;
     let target;
     if (event.pointerType === 'touch') target = (cell.state + 1) % 3;                // empty -> bomb -> pressed -> empty
     else if (event.button === 0) target = cell.state === 1 ? 0 : 1;                  // left click
@@ -164,12 +272,17 @@ export class GameScene extends Container {
     this.drag = IDLE_DRAG();
     this.history.push(changes);
     this.checkVictory();
+    this.checkTutorialProgress();
     this.updateButtons();
     if (changes.length) this.changed();
   }
 
   handleKey(e) {
     if (e.key === 'Escape' && this.dialog.visible) { this.dialog.cancel(); return; }
+    if (this.tutorialActive() && !this.dialog.visible && !e.ctrlKey && !e.metaKey) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight') { e.preventDefault(); this.tutorialNext(); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); this.tutorialBack(); return; }
+    }
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
     const k = e.key.toLowerCase();
     if (k === 'z') { e.preventDefault(); if (e.shiftKey) this.redo(); else this.undo(); }
@@ -202,24 +315,27 @@ export class GameScene extends Container {
     this.hasWon = true;
     this.winText.visible = true;
     this.callbacks.onWin?.(this.session);
+    if (this.tutorialActive()) this.finishTutorial();   // solving the level ends the tutorial
   }
 
   undo() {
-    if (this.hasWon || this.dialog.visible) return;
+    if (this.hasWon || this.dialog.visible || this.locked) return;
     const changes = this.history.undo();
     if (!changes) return;
     for (const c of changes) this.setCellState(this.grid.cells[c.index], c.from);
     this.updateButtons();
     this.changed();
+    this.checkTutorialProgress();
   }
 
   redo() {
-    if (this.hasWon || this.dialog.visible) return;
+    if (this.hasWon || this.dialog.visible || this.locked) return;
     const changes = this.history.redo();
     if (!changes) return;
     for (const c of changes) this.setCellState(this.grid.cells[c.index], c.to);
     this.updateButtons();
     this.changed();
+    this.checkTutorialProgress();
   }
 
   askReset() {
@@ -239,12 +355,17 @@ export class GameScene extends Container {
     this.history.clear();
     this.hasWon = false;
     this.winText.visible = false;
+    if (this.levelHasTutorial) {   // starting from scratch means the tutorial starts again too
+      this.tutorial = createTutorial(this.levelData, 0);
+      this.pendingTutorialMarks = !!this.tutorial;
+      this.layout(this.size.w, this.size.h);
+    }
     this.updateButtons();
     this.changed();
   }
 
   updateButtons() {
-    this.undoBtn.setEnabled(this.history.canUndo && !this.hasWon);
-    this.redoBtn.setEnabled(this.history.canRedo && !this.hasWon);
+    this.undoBtn.setEnabled(this.history.canUndo && !this.hasWon && !this.locked);
+    this.redoBtn.setEnabled(this.history.canRedo && !this.hasWon && !this.locked);
   }
 }

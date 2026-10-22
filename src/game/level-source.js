@@ -4,19 +4,6 @@ import { buildOptions } from '../../shared/options.js';
 
 export const CANCELLED = Symbol('cancelled');
 
-/** Fetches public/levels/<difficulty>/level<number>.json */
-export async function loadPredefinedLevel(difficulty, number) {
-  const url = `${import.meta.env.BASE_URL}levels/${difficulty}/level${number}.json`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Level file not found (${url})`);
-  try {
-    return await response.json();
-  } catch {
-    // a dev server answers missing files with index.html, which is not JSON
-    throw new Error(`Level file not found or not valid JSON (${url})`);
-  }
-}
-
 /**
  * Generates a random level for a difficulty using a pool of web workers, each trying its own seeds; the first level
  * found wins. With `seed` given, exactly that seed is generated (it either gives its level or an error).
