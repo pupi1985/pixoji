@@ -4,7 +4,7 @@
  * inside a web worker for random levels.
  */
 import { CELL, DIRS4, cellValue, lineValue, cellW, makePuzzle } from './logic-core.js';
-import { countSolutions, rateSolve } from './solver-core.js';
+import { countSolutions, rateSolve, measureComplexity } from './solver-core.js';
 
 function mulberry32(a) {
   return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -185,9 +185,11 @@ function tryGenerate(rng, o, log) {
   if (!r.solved) return null;
   if (r.rating < minDepth) { log(`  rating ${r.rating} < minimum depth ${minDepth}`); return null; }
   const cellClues = state.C.flat().filter((t) => t >= 1).length;
+  // complexity of the finished level (a separate, un-metered puzzle: the measurement must not use the seed's work budget)
+  const measured = measureComplexity(makePuzzle({ W, H, C: state.C, top: state.top, left: state.left, cellVals, topVals, leftVals }, { maxNodes: o.nodeBudget }), { maxDepth: Math.max(maxDepth, 1) });
   return {
     W, H, B, C: state.C, top: state.top, left: state.left,
-    meta: { rating: r.rating, steps: r.steps, stepsByDepth: r.byDepth, clueDensity: Number((cellClues / total).toFixed(2)), work: Math.round(meter.used), bombRatio: Number(ratio.toFixed(2)), lineClues: state.top.concat(state.left).filter(Boolean).length, cellTypes: [...new Set(state.C.flat().filter(Boolean))].sort(), lineTypes: [...new Set(state.top.concat(state.left).filter(Boolean))].sort() },
+    meta: { rating: r.rating, complexity: measured.complexity, chain: measured.chain, steps: r.steps, stepsByDepth: r.byDepth, clueDensity: Number((cellClues / total).toFixed(2)), work: Math.round(meter.used), bombRatio: Number(ratio.toFixed(2)), lineClues: state.top.concat(state.left).filter(Boolean).length, cellTypes: [...new Set(state.C.flat().filter(Boolean))].sort(), lineTypes: [...new Set(state.top.concat(state.left).filter(Boolean))].sort() },
   };
 }
 

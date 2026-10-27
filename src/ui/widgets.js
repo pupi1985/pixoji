@@ -31,6 +31,7 @@ export function createTextButton({ label, width, height = UI_CONFIG.buttonSize, 
   btn.on('pointerover', (e) => { if (e.pointerType === 'mouse') paint(hoverColor); });
   btn.on('pointerout', () => paint(color));
   btn.on('pointertap', () => onTap?.());
+  btn.setLabel = (label) => { text.text = label; };
   makeToggleable(btn);
   return btn;
 }

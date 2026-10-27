@@ -1,6 +1,7 @@
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { GridCell } from './cell.js';
 import { GRID_CONFIG } from '../config.js';
+import { addLineClueShape } from './clue-icons.js';
 
 export class ButtonGrid extends Container {
   constructor() {
@@ -114,24 +115,9 @@ export class ButtonGrid extends Container {
 
   createClueBadge(value, typeCode, targetSize, orientation = "top") {
     const badgeContainer = new Container();
-    const styleSettings = GRID_CONFIG.clueStyles[typeCode];
-    const mainColor = styleSettings ? styleSettings.color : 0x7f8c8d;
-    const bgShape = new Graphics(); const radius = targetSize * 0.45;
+    const radius = targetSize * 0.45;
 
-    if (typeCode === 1) {
-      if (orientation === "top") bgShape.poly([-radius, -radius * 0.8, radius, -radius * 0.8, 0, radius]);
-      else bgShape.poly([-radius * 0.8, -radius, radius, 0, -radius * 0.8, radius]);
-      bgShape.fill({ color: mainColor }); badgeContainer.addChild(bgShape);
-    } else if (typeCode === 2) {
-      const r = radius; bgShape.poly([-r, r * 0.6, r, r * 0.6, r, -r * 0.6, r * 0.5, r * 0.1, 0, -r * 0.8, -r * 0.5, r * 0.1, -r, -r * 0.6]);
-      bgShape.fill({ color: mainColor }); badgeContainer.addChild(bgShape);
-    } else if (typeCode === 3) {
-      const barW = (radius * 2) / 3, barH = radius * 1.5;
-      const b1 = new Graphics().rect(-radius, -barH / 2, barW - 2, barH).fill({ color: 0x7f8c8d });
-      const b2 = new Graphics().rect(-radius + barW, -barH / 2, barW - 2, barH).fill({ color: GRID_CONFIG.cell.darkFace });
-      const b3 = new Graphics().rect(-radius + (barW * 2), -barH / 2, barW - 2, barH).fill({ color: 0x7f8c8d });
-      badgeContainer.addChild(b1, b2, b3);
-    }
+    addLineClueShape(badgeContainer, typeCode, radius, orientation);
 
     const labelStyle = new TextStyle({
       fontFamily: 'Arial', fontSize: Math.max(11, Math.floor(targetSize * 0.42)),

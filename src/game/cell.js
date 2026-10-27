@@ -1,5 +1,6 @@
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { APP_CONFIG, GRID_CONFIG } from '../config.js';
+import { drawAreaIcon, drawCellClueIcon, drawDashedLine, drawMultiplierRing } from './clue-icons.js';
 
 /**
  * Robust cell container rendering icons, text, and custom fences persistently across ALL interaction states.
@@ -83,22 +84,7 @@ export class GridCell extends Container {
   }
 
   drawDashedLine(g, x1, y1, x2, y2, strokeStyle, dashLength = 4, gapLength = 4) {
-    const dx = x2 - x1; const dy = y2 - y1;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const dashCount = Math.floor(distance / (dashLength + gapLength));
-    const xStep = (dx / distance) * (dashLength + gapLength);
-    const yStep = (dy / distance) * (dashLength + gapLength);
-    const xDash = (dx / distance) * dashLength;
-    const yDash = (dy / distance) * dashLength;
-
-    for (let i = 0; i <= dashCount; i++) {
-      const startX = x1 + i * xStep; const startY = y1 + i * yStep;
-      if (i * (dashLength + gapLength) + dashLength <= distance) {
-        g.moveTo(startX, startY).lineTo(startX + xDash, startY + yDash).stroke(strokeStyle);
-      } else if (i * (dashLength + gapLength) < distance) {
-        g.moveTo(startX, startY).lineTo(x2, y2).stroke(strokeStyle);
-      }
-    }
+    drawDashedLine(g, x1, y1, x2, y2, strokeStyle, dashLength, gapLength);
   }
 
   draw() {
@@ -134,17 +120,8 @@ export class GridCell extends Container {
     const cx = s / 2; const cy = s * 0.35; const r = s * 0.20;
 
     // --- ICONOS DE LAS PISTAS (TIPOS 1 A 3) ---
-    if (this.isClueCell && this.clueType <= 3) {
-      if (this.clueType === 1) {
-        g.rect(cx - r, cy - r, r * 2, r * 2).stroke({ color: vectorColor, width: 2 });
-      } else if (this.clueType === 2) {
-        g.moveTo(cx, cy - r * 0.3).bezierCurveTo(cx - r * 0.5, cy - r * 0.9, cx - r, cy - r * 0.5, cx - r, cy - r * 0.1).bezierCurveTo(cx - r, cy + r * 0.3, cx - r * 0.5, cy + r * 0.6, cx, cy + r * 0.9).lineTo(cx, cy + r * 0.6).lineTo(cx + r * 0.15, cy + r * 0.4).lineTo(cx - r * 0.15, cy + r * 0.1).fill({ color: vectorColor });
-        g.moveTo(cx, cy - r * 0.3).bezierCurveTo(cx + r * 0.5, cy - r * 0.9, cx + r, cy - r * 0.5, cx + r, cy - r * 0.1).bezierCurveTo(cx + r, cy + r * 0.3, cx + r * 0.5, cy + r * 0.6, cx, cy + r * 0.9).lineTo(cx, cy + r * 0.6).lineTo(cx + r * 0.15, cy + r * 0.4).lineTo(cx - r * 0.15, cy + r * 0.1).fill({ color: vectorColor });
-        g.moveTo(cx, cy - r * 0.3).lineTo(cx - r * 0.15, cy + r * 0.1).lineTo(cx + r * 0.15, cy + r * 0.4).lineTo(cx, cy + r * 0.6).stroke({ color: eyeColor, width: 1.5 });
-      } else if (this.clueType === 3) {
-        g.circle(cx, cy, r).fill({ color: vectorColor }); g.circle(cx - r * 0.35, cy - r * 0.20, r * 0.12).fill({ color: eyeColor }); g.circle(cx + r * 0.35, cy - r * 0.20, r * 0.12).fill({ color: eyeColor }); g.moveTo(cx - r * 0.4, cy + r * 0.1).arc(cx, cy + r * 0.1, r * 0.4, 0, Math.PI, false).stroke({ color: eyeColor, width: 2 });
-      }
-    }
+    // --- ICONOS DE LAS PISTAS (TIPOS 1 A 3) ---
+    if (this.isClueCell && this.clueType <= 3) drawCellClueIcon(g, this.clueType, cx, cy, r, vectorColor, eyeColor);
 
     // --- CERCAS PERIMETRALES (TIPO 4) ---
     if (this.clueType === 4) {
@@ -159,30 +136,10 @@ export class GridCell extends Container {
     }
 
     // --- MULTIPLICADOR (TIPO 5): circle with a "2" inside (the "2" is the text node) ---
-    if (this.clueType === 5) {
-      g.circle(s / 2, s / 2, s * 0.30).stroke({ color: vectorColor, width: 2.5 });
-    }
+    if (this.clueType === 5) drawMultiplierRing(g, s / 2, s / 2, s * 0.30, vectorColor);
 
     // --- ÁREA CONTIGUA (TIPO 6): paint bucket tipped over, paint flowing out of it ---
-    if (this.clueType === 6) {
-      const R = r * 1.05;
-      const ox = cx - r * 0.25, oy = cy;
-      const ang = Math.PI / 6, ca = Math.cos(ang), sa = Math.sin(ang);
-      const P = (x, y) => [ox + (x * ca - y * sa) * R, oy + (x * sa + y * ca) * R];   // local bucket coords -> cell coords (tilted)
-
-      // bucket body (wider at the rim)
-      g.poly([...P(-0.6, -0.5), ...P(0.6, -0.5), ...P(0.45, 0.8), ...P(-0.45, 0.8)]).fill({ color: vectorColor });
-      // paint level inside, just under the rim (cut-out in the cell face colour)
-      g.poly([...P(-0.6, -0.5), ...P(0.6, -0.5), ...P(0.57, -0.15), ...P(-0.57, -0.15)]).fill({ color: eyeColor });
-      // handle
-      const [h1x, h1y] = P(-0.6, -0.5), [h2x, h2y] = P(-0.1, -0.95), [h3x, h3y] = P(0.35, -0.5);
-      g.moveTo(h1x, h1y).quadraticCurveTo(h2x, h2y - R * 0.25, h3x, h3y).stroke({ color: vectorColor, width: 1.5, cap: 'round' });
-      // paint stream leaving the low corner of the rim, plus a drop
-      const [lx, ly] = P(0.6, -0.5);
-      const ex = lx + R * 0.45, ey = ly + R * 0.7;
-      g.moveTo(lx, ly).quadraticCurveTo(lx + R * 0.45, ly + R * 0.02, ex, ey).stroke({ color: vectorColor, width: Math.max(2, R * 0.30), cap: 'round', join: 'round' });
-      g.circle(ex, ey + R * 0.22, R * 0.17).fill({ color: vectorColor });
-    }
+    if (this.clueType === 6) drawAreaIcon(g, cx, cy, r, vectorColor, eyeColor);
 
     if (this.hasBomb && APP_CONFIG.showBombs) {
       g.circle(s / 2, s / 2, s * 0.12).fill({ color: 0xc0392b });

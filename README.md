@@ -7,7 +7,7 @@ It is a static web app (no server code) that installs as a PWA and runs offline.
 
 ```
 index.html, vite.config.js, package.json
-levels/<difficulty>/*.json     YOUR levels (never modified by any tool)           docs/tutorials.md   how to write tutorials
+levels/<difficulty>/*.json     YOUR levels (never modified by any tool); 00-tutorial.json in difficulties 1-9 teach each clue   docs/tutorials.md   how to write tutorials
 public/levels/                 GENERATED from levels/ by `npm run levels` (git-ignored): <id>-<v>.json files + index.json
 public/manifest.webmanifest, icons/   app name and icons (what "install" uses)
 .github/workflows/deploy.yml   builds and publishes to GitHub Pages on every push to main
@@ -16,9 +16,10 @@ shared/                        pure logic used by the game, the web worker and t
   presets.json                 difficulty presets (clue weights, bombs, depth ...)   generator.js, solver-core.js, ...
   level-index.js               format of the generated index.json      tutorial.js   format + validation of level tutorials
 tools/                         command line tools (Node)
-  generate-level.js            create levels                  build-levels.js   publish levels/ -> public/levels/
-  show-level.js                print a level with coordinates solver.js        explain / solve a level
-  pwa-plugin.js                build step that writes dist/sw.js
+  generate-level.js            create levels                  build-levels.js     publish levels/ -> public/levels/
+  level-complexity.js          complexity of every level      solver.js           explain / solve a level (+ complexity)
+  show-level.js                level with coordinates         presets-file.js     check presets.json (syntax, duplicate keys, rules)
+  pwa-plugin.js, presets-plugin.js   build steps (dist/sw.js; stop the build on a bad presets.json)
 src/                           the game (PixiJS)
   game/catalog.js              level list + levels saved on the device     pwa/register.js   service worker + update flow
   game/tutorial*.js, ui/tutorial-panel.js   tutorials                      game/saved-game.js   resume after a reload
@@ -88,18 +89,43 @@ Workflow:
 
 ```
 npm run generate -- --level 4 --count 5 --out levels/4     # make levels (files 01.json, 02.json, ... numbered after the existing ones) - or write/copy your own
-npm run levels:check                                        # optional: validate everything, incl. exactly-one-solution (CI runs it too)
+npm run levels:check                                        # optional: validate everything, incl. exactly-one-solution and tutorials (CI runs it too)
+npm run levels:complexity                                   # how complex each level really is (see below)
 git add levels && git commit -m "new levels" && git push    # the workflow generates public/levels and publishes
 ```
 
+- **Sorted by complexity.** When the generator makes several levels in one run it renames them in order of complexity, easiest first (the
+  level files that were already in the folder are not touched). Add `--resort` to renumber *every* `NN.json` of the folder by complexity;
+  files with any other name (`00-tutorial.json`, your own names) are never renamed.
 - **Order** inside a difficulty = natural order of the source file names (`2.json` before `10.json`; the generator names files `01.json`, `02.json`, ...; or call them `01-intro.json`, ...).
 - **Add / remove / rename / reorder**: just do it in `levels/`. Nothing else to update; the index is regenerated every time.
 - **Identity.** Each level has an **id** (a hash of its puzzle) and a **version** `v` (a hash of its whole file). Completed ticks are kept by
   id, so reordering, renaming files, adding levels or fixing a tutorial never resets progress; changing the puzzle itself gives a new
   level that starts as not completed. A changed file gets a new published name, so devices always fetch the new version.
-- **Tutorials** are written inside the level file: see `docs/tutorials.md`. Levels with one show a **?** in the list.
+- **Tutorials** are written inside the level file: see `docs/tutorials.md`. Levels with one show a **?** in the list. The project ships
+  one tutorial level for every clue type as `levels/<difficulty>/00-tutorial.json` (difficulty 1 neighbor, 2 row/column count, 3 isolated,
+  4 surrounded, 5 chain, 6 area, 7 multiplier, 8 longest-run, 9 groups): the first level of the difficulty that introduces the clue.
+- **The menu** shows, on each difficulty tile, the icon of the clue that difficulty adds for the first time (worked out from
+  `shared/presets.json`, so it follows your edits). After a level is cleared a **Next** button moves on to the next level, or to the first
+  level of the next difficulty that has levels; after a random level it generates another one; after the very last level it offers the menu.
 - **On devices**: the list is fetched at every start (fresh when online, the saved copy when offline). New levels appear in the list with
   a download badge; changed levels are downloaded again; levels no longer in the list are deleted from the device on the next online start.
+
+### Complexity
+
+How hard a level really is can differ from the difficulty it sits in, so every level can be measured. The **complexity** is the sum of the
+cost of every deduction the human-style solver needs: a direct deduction costs 1 plus the number of known cells it has to combine; an
+assumption ("suppose X is a bomb ...") costs ten times more for every level of nesting. The scale is arbitrary: compare levels with
+each other. It is printed when you generate a level (`complexity=201`), by `npm run solve -- levels/4/01.json` (with the longest chain of
+dependent deductions), and for all levels at once:
+
+```
+npm run levels:complexity                 # every level in levels/: size, clues, rating (assumption depth), steps, chain, complexity
+npm run levels:complexity -- --difficulty 6
+```
+
+The table also shows each level against the median of its difficulty (tutorials are left out of the median) and flags levels whose
+assumption depth is outside the `depth` range of their difficulty in `shared/presets.json`: good candidates to recreate.
 
 ## 6. Random levels and seeds
 
@@ -120,6 +146,21 @@ Open it in Chrome, DevTools -> Application -> Service Workers, tick **Offline**,
 `levels/index.json` and a downloaded level still load. (A phone on the same network cannot install from `http://<ip>:4173` because installing
 needs HTTPS; use the GitHub Pages address on the phone.)
 
+## Troubleshooting: "Cannot find module ..." / missing files
+
+`npm run dev` and `npm run build` first run `npm run check`, which lists every project file that is missing (the list is `requiredFiles` in
+`package.json`). Each release adds new files, so after updating from a zip make sure the new ones were copied too. To see everything that
+differs between your folder and a release zip:
+
+```
+unzip -q pixi-button-grid.zip -d /tmp/pbg
+diff -rq /tmp/pbg/pixi-button-grid . --exclude=node_modules --exclude=dist --exclude=.git --exclude=public
+# "Only in /tmp/pbg/...: x.js" = a file you are missing;   "Files ... differ" = an updated file
+# your own levels/ and shared/presets.json are expected to differ: keep them
+```
+
+To copy every release file except your own levels and presets: `rsync -a --exclude levels --exclude shared/presets.json --exclude node_modules /tmp/pbg/pixi-button-grid/ ./`
+
 ## Caveats
 
 - Installing and the service worker need **HTTPS**; GitHub Pages provides it.
@@ -133,10 +174,14 @@ needs HTTPS; use the GitHub Pages address on the phone.)
 - Mouse: left click = bomb, right click = pressed (no bomb), drag to paint.
 - Touch: every tap cycles empty -> bomb -> pressed -> empty; drag to paint.
 - Undo / redo buttons (Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z), Reset asks for confirmation.
+- **← Menu** leaves the level at once if you have not marked anything (or have undone everything, or the level is cleared); if you have
+  marked at least one cell, bomb or safe, it asks first, because those marks would be lost. Marks that a tutorial places as examples do not count.
 
 ## Presets (shared/presets.json)
 
-One file feeds the game and the CLI tools. Per difficulty: `size`, `bombs`, `cellCluesDensity`, `cellClues`, `lineCluesDensity`,
+One file feeds the game and the CLI tools. It is checked every time it is read (also by `npm run dev` / `npm run build`, which stop with a
+readable error): JSON syntax, the preset rules and **duplicate keys** (JSON would silently keep only the last of two equal keys, e.g. a
+level block copied and never renumbered). `npm run presets:check` runs just that check. Per difficulty: `size`, `bombs`, `cellCluesDensity`, `cellClues`, `lineCluesDensity`,
 `lineClues`, `depth`, optional `chainClueMaxSize`, `areaClueMaxSize`, `redundant`, `about`. `bombs`, `cellCluesDensity` and
 `lineCluesDensity` are fraction ranges `[min, max]`; `depth` is the range of nested assumptions a level must need (0 = direct deduction
 only). `cellClues` (neighbor, isolated, surrounded, chain, multiplier, area) and `lineClues` (count, longest-run, groups) use ranged

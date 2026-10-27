@@ -2,7 +2,7 @@
 /**
  * solver.js - human-style logical solver with written explanations.
  *
- * node tools/solver.js levels/easy/level1.json [options]
+ * node tools/solver.js levels/1/01.json [options]
  *   --depth N        max number of NESTED assumptions allowed (default 1)
  *                    0 = only direct deductions from one clue at a time
  *                    1 = "suppose X is a bomb ... contradiction" (and case analysis)
@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseCli, formatUsage, fail } from './cli-utils.js';
 import { parseLevel, specFromLevel, makePuzzle } from '../shared/logic-core.js';
-import { countSolutions, solveIter, nodeOf, renderStep, renderBoard, LEGEND } from '../shared/solver-core.js';
+import { countSolutions, solveIter, nodeOf, renderStep, renderBoard, ComplexityTally, LEGEND } from '../shared/solver-core.js';
 
 // ------------------------------------------------------------------ CLI
 const SPECS = [
@@ -42,7 +42,7 @@ function usageText() {
     positional: [{ name: 'level.json', desc: 'Path of the level file (grid, bombs, clues), as produced by generate-level.js or used by the game.' }],
     specs: SPECS,
     sections: [{ title: 'Board legend', text: `  ${LEGEND.replace(/ \| /g, '\n  ')}` }],
-    examples: ['node tools/solver.js public/levels/easy/level1.json', 'node tools/solver.js level.json --depth 2 --step --board', 'node tools/solver.js level.json --json > solution.json'],
+    examples: ['node tools/solver.js levels/1/01.json', 'node tools/solver.js levels/6/03.json --depth 2 --step --board', 'node tools/solver.js levels/6/03.json --json > solution.json'],
   });
 }
 
@@ -70,12 +70,12 @@ async function main() {
 
   let rl = null;
   if (args.step && !json) { const { createInterface } = await import('node:readline/promises'); rl = createInterface({ input: process.stdin, output: process.stdout }); }
-  const vals = new Int8Array(puz.nG).fill(-1), out = [], byDepth = {};
+  const vals = new Int8Array(puz.nG).fill(-1), out = [], byDepth = {}, tally = new ComplexityTally();
   const it = solveIter(puz, opts);
   let r = it.next(), i = 0;
   while (!r.done) {
     const f = r.value, node = nodeOf(puz, f);
-    vals[f.g] = f.v; i++;
+    vals[f.g] = f.v; i++; tally.add(f);
     byDepth[f.depth || 0] = (byDepth[f.depth || 0] || 0) + 1;
     if (json) out.push({ step: i, depth: f.depth || 0, ...node });
     else {
@@ -90,11 +90,12 @@ async function main() {
   const sum = r.value;
   const correct = sum.solved && level.B.every((row, rr) => row.every((b, cc) => vals[puz.gid[rr][cc]] === b));
   if (json) {
-    console.log(JSON.stringify({ solved: sum.solved, matchesLevel: correct, stepsByDepth: byDepth, steps: out }, null, 2));
+    console.log(JSON.stringify({ solved: sum.solved, matchesLevel: correct, complexity: tally.summary().complexity, longestChain: tally.chain, stepsByDepth: byDepth, steps: out }, null, 2));
     return;
   }
   log(sum.solved ? 'SOLVED.' : sum.timeout ? 'Stopped: time limit reached.' : sum.error ? 'Inconsistent puzzle: a contradiction was found without any assumption.' : `STUCK: nothing can be deduced with hypothesis depth <= ${opts.maxDepth}. Try --depth ${opts.maxDepth + 1}.`);
   log(`Steps by depth: ${Object.entries(byDepth).map(([d, n]) => `depth ${d}: ${n}`).join(', ') || 'none'}`);
+  if (sum.solved) log(`Complexity: ${tally.complexity}   (sum of the cost of every deduction: direct ones cost 1 + the cells they combine, an assumption costs 10x more per nesting level; longest chain of dependent deductions: ${tally.chain})`);
   if (sum.solved) log(correct ? 'Solution matches the bombs matrix of the level file.' : 'WARNING: solution differs from the bombs matrix of the level file!');
   else { log(); log(renderBoard(puz, vals)); }
 }

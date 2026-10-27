@@ -26,6 +26,22 @@ export class TutorialPanel extends Container {
     if (this.visible) this.build();
   }
 
+  /**
+   * The panel height that fits the longest of `texts` at the normal font size (so it stays the same on every step and the board
+   * does not jump), within a fraction of the screen; longer texts shrink their font instead.
+   */
+  heightFor(texts, w, h) {
+    const btnH = UI_CONFIG.buttonSize, textW = w - 2 * (MARGIN + PAD);
+    let tallest = 0;
+    for (const text of texts) {
+      const t = new Text({ text, style: { fontFamily: 'Arial', fontSize: 18, fill: 0xffffff, wordWrap: true, wordWrapWidth: textW, lineHeight: 18 * 1.3 } });
+      tallest = Math.max(tallest, t.height);
+      t.destroy();
+    }
+    const needed = (PAD - 2) + tallest + 8 + btnH + PAD / 2 + MARGIN;
+    return Math.round(Math.min(Math.max(110, needed), Math.max(110, h * (h < 480 ? 0.4 : 0.42))));
+  }
+
   show(state) {
     this.state = state;
     this.visible = true;
@@ -48,30 +64,35 @@ export class TutorialPanel extends Container {
 
     this.addChild(new Graphics().roundRect(MARGIN, 0, w - 2 * MARGIN, H - MARGIN, 14).fill({ color: 0x2b2d3a, alpha: 0.97 }).stroke({ color: 0xffc400, width: 2 }));
 
-    // buttons row: back | step counter | skip | next
+    // Buttons row. Left: back and next/close side by side, then the step counter. Far right: Skip, kept away from them so it is
+    // not hit by mistake. On the last step the primary button reads "Close" and ends the tutorial, so Skip would be a duplicate and is
+    // left out; if the last step ends by itself (it waits for the player to solve the level) there is no primary button and the far
+    // button becomes "Close".
     const rowY = H - MARGIN - PAD / 2 - btnH;
-    const back = createTextButton({ label: '◀', width: 46, height: btnH, color: UI_CONFIG.navColor, hoverColor: UI_CONFIG.navHoverColor, onTap: () => this.callbacks.onBack?.() });
-    back.position.set(MARGIN + PAD, rowY);
+    const backW = 46, primaryW = 100, farW = 62, gap = 8;
+    let x = MARGIN + PAD;
+    const back = createTextButton({ label: '◀', width: backW, height: btnH, color: UI_CONFIG.navColor, hoverColor: UI_CONFIG.navHoverColor, onTap: () => this.callbacks.onBack?.() });
+    back.position.set(x, rowY);
     back.setEnabled(s.canGoBack);
     this.addChild(back);
+    x += backW + gap;
 
-    const nextW = 96, skipW = 60;
-    let right = w - MARGIN - PAD;
     if (s.showNext) {
-      const next = createTextButton({ label: s.last ? 'Got it ✓' : 'Next ▶', width: nextW, height: btnH, color: 0x16a085, hoverColor: 0x1abc9c, onTap: () => this.callbacks.onNext?.() });
-      right -= nextW;
-      next.position.set(right, rowY);
-      this.addChild(next);
-      right -= 8;
+      const primary = createTextButton({ label: s.last ? 'Close ✓' : 'Next ▶', width: primaryW, height: btnH, color: 0x16a085, hoverColor: 0x1abc9c, onTap: () => this.callbacks.onNext?.() });
+      primary.position.set(x, rowY);
+      this.addChild(primary);
+      x += primaryW;
     }
-    const skip = createTextButton({ label: 'Skip', width: skipW, height: btnH, color: 0x555a6e, hoverColor: 0x6d7390, fontSize: 14, onTap: () => this.callbacks.onSkip?.() });
-    right -= skipW;
-    skip.position.set(right, rowY);
-    this.addChild(skip);
+
+    if (!(s.showNext && s.last)) {
+      const far = createTextButton({ label: s.last ? 'Close' : 'Skip', width: farW, height: btnH, color: 0x555a6e, hoverColor: 0x6d7390, fontSize: 14, onTap: () => this.callbacks.onSkip?.() });
+      far.position.set(w - MARGIN - PAD - farW, rowY);
+      this.addChild(far);
+    }
 
     const counter = new Text({ text: `${s.index + 1} / ${s.count}`, style: { fontFamily: 'Arial', fontSize: 13, fill: 0x9a9db0 } });
     counter.anchor.set(0, 0.5);
-    counter.position.set(MARGIN + PAD + 46 + 10, rowY + btnH / 2);
+    counter.position.set(x + 14, rowY + btnH / 2);
     this.addChild(counter);
 
     // text: as large as fits above the buttons

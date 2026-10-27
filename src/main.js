@@ -8,6 +8,7 @@ import { LevelCatalog } from './game/catalog.js';
 import { generateRandomLevel, CANCELLED } from './game/level-source.js';
 import { clearSavedGame, loadMenuState, loadSavedGame, saveGame, saveMenuState } from './game/saved-game.js';
 import { markLevelCompleted } from './progress.js';
+import { nextLevel, nextLabel } from './game/next-level.js';
 import { registerServiceWorker } from './pwa/register.js';
 
 (async () => {
@@ -115,6 +116,19 @@ import { registerServiceWorker } from './pwa/register.js';
     onChange: saveGame,
     // random levels are not tracked, only the predefined ones
     onWin: (session) => { if (session.mode === 'predefined') markLevelCompleted(session.levelId); },
+    // the button under a cleared level: next level (or next difficulty), a new random level, or the menu after the last one
+    nextLabel: (session) => nextLabel(nextLevel(session, catalog)),
+    onNext: (session) => {
+      const target = nextLevel(session, catalog);
+      clearSavedGame();
+      show(menu);
+      if (!target) { menu.refresh(); return; }
+      menu.mode = target.kind;
+      menu.difficulty = target.difficulty;
+      menu.go(target.kind === 'random' ? 'difficulty' : 'levels');   // so "back to menu" lands next to where the player is
+      if (target.kind === 'random') playRandom(target.difficulty);
+      else playPredefined(target.difficulty, target.entry, target.number);
+    },
   });
 
   // also save when the page is hidden or closed (the browser may discard or reload it in the background)

@@ -4,7 +4,8 @@ A tutorial is an optional `"tutorial"` list inside a level's JSON file (next to 
 the game shows a text box at the bottom of the screen and can lock the board, highlight cells and show examples. A level with a tutorial
 shows a **?** icon in the level list.
 
-A complete working example is in `docs/examples/tutorial-level.json` (copy it to `levels/1/` to try it).
+Working examples: the nine tutorial levels in the project, `levels/<difficulty>/00-tutorial.json` (one per clue type). Open one in a text
+editor next to `npm run show -- levels/4/00-tutorial.json --bombs` to see how the steps use the actual coordinates and values.
 
 ## Finding coordinates
 
@@ -85,11 +86,17 @@ colors themselves are in `src/config.js` (`UI_CONFIG.tutorialColors`).
 Sets cells when the step starts, to show an example: `"bombs"` (marked as bomb), `"safe"` (pressed), `"clear"` (back to empty).
 Cells linked by a chain move together. Marks are not part of the player's undo history.
 
+`"clear": "all"` empties the whole board. Put it on the last `play` step: the earlier steps usually show bombs and safe cells as
+examples, and the player should then solve the level from a clean board.
+
 ## The controls
 
 - **Back arrow** (the `◀` button, or the Left arrow key) goes back one step. The board returns to how the tutorial itself left it before
   that step: examples from later steps disappear and the player's own moves are dropped.
-- **Next / Got it** (or Right arrow, Enter, Space) continues. **Skip** ends the tutorial and unlocks the board.
+- **Next** (or Right arrow, Enter, Space) continues; it sits right next to the back arrow. **Skip** is on the opposite side of the box, so it
+  is not hit by mistake: it ends the tutorial and unlocks the board.
+- On the last step the **Next** button reads **Close** and ends the tutorial (Skip would do the same, so it is not shown). If the last step
+  waits for the player to solve the level there is no Next button and the far button reads **Close** instead.
 - The tutorial ends after its last step, when skipped, or when the level is solved. It restarts from the beginning on **Reset**.
 - The game remembers the current step if the page is reloaded, and does not show a finished tutorial again for that run.
 - Undo / redo are disabled while the board is locked.
@@ -98,6 +105,10 @@ Cells linked by a chain move together. Marks are not part of the player's undo h
 
 The build refuses a level whose tutorial is malformed and tells you where, for example
 `levels/1/level3.json: tutorial step 4.highlight[0].cell: cell [5, 0] is outside the grid (rows 0-3, columns 0-3)`.
+Beyond the syntax, the build also compares the tutorial with the level's real solution and refuses a tutorial that says something false:
+cells marked (or waited for) as bombs must be bombs, cells marked as safe must be safe, cells highlighted with the `bomb` / `safe` style
+must be bombs / safe, and a `play ... "until": "solved"` step must not start on a board that the earlier marks already solved (use
+`"clear": "all"`).
 Nothing is published until every level passes. A level's **identity** (completed tick) depends only on its puzzle, so changing the
 tutorial text never resets progress; the edited level reaches devices as a new file the next time they are online.
 
@@ -105,5 +116,6 @@ tutorial text never resets progress; the edited level reaches devices as a new f
 
 - One idea per `say` step; two or three short sentences read well on a phone.
 - Explain a clue by highlighting it (`cell`, primary) together with the area it counts (`around`, secondary), then use `mark` to show the consequence.
-- Finish with a `play` step ending in `"until": "solved"` so the player applies what they learned.
+- Finish with a `play` step ending in `"until": "solved"` and `"mark": { "clear": "all" }` so the player applies what they learned on a clean board.
+- Keep a step's text under about 300 characters: it has to fit in the box at the bottom of a phone screen.
 - Tutorials work best on levels the player solves with direct deductions (difficulty with `depth` 0).

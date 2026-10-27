@@ -1,20 +1,20 @@
 {
   "grid": { "width": 4, "height": 4 },
   "bombs": [
-    [0, 0, 1, 0],
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
     [0, 0, 0, 0],
-    [0, 0, 1, 0],
     [0, 0, 1, 1]
   ],
   "clues": {
     "top": [0, 0, 0, 0],
     "left": [0, 0, 0, 0],
     "grid": [
-    [0, 1, 1, 1],
+    [1, 1, 0, 1],
     [1, 1, 1, 1],
     [1, 1, 1, 1],
-    [1, 1, 0, 1]
+    [1, 1, 1, 0]
     ]
   },
-  "meta": {"rating":0,"steps":16,"stepsByDepth":{"0":16},"clueDensity":0.88,"work":317,"bombRatio":0.32,"lineClues":0,"cellTypes":[1],"lineTypes":[],"seed":547230006,"level":1}
+  "meta": {"rating":0,"steps":16,"stepsByDepth":{"0":16},"clueDensity":0.88,"work":236,"bombRatio":0.28,"lineClues":0,"cellTypes":[1],"lineTypes":[],"seed":547230002,"level":1}
 }

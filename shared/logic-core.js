@@ -29,7 +29,7 @@ export function parseLevel(json) {
   let B = null;
   if (Array.isArray(json.bombs)) {
     const ok = json.bombs.length === H && json.bombs.every((row) => Array.isArray(row) && row.length === W && row.every((v) => v === 0 || v === 1));
-    if (!ok) throw new Error('"bombs" must be an H x W matrix of 0/1 (level1.json uses an older list-of-columns format that grid.js cannot read either)');
+    if (!ok) throw new Error('"bombs" must be an H x W matrix of 0/1 (a list of rows, each with one 0/1 per column)');
     B = json.bombs.map((row) => row.slice());
   }
   return { W, H, B, C, top, left };

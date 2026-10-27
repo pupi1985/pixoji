@@ -59,5 +59,28 @@ export function validatePresets(data, source = 'presets') {
   return { source, levels, defaultLevel, generation };
 }
 
+/**
+ * The clue types that appear for the first time at each difficulty, in difficulty order: { 1: [{ kind: 'cell', code: 1 }], 2: [{ kind: 'line', code: 1 }], ... }.
+ * A type counts as present when its weight range can be above zero (and, for line clues, when line clues are used at all).
+ * Difficulties that add nothing new are left out. The menu shows these icons so the player can see what each difficulty adds.
+ */
+export function introducedClues(presets) {
+  const seen = { cell: new Set(), line: new Set() };
+  const out = {};
+  for (const d of difficultiesOf(presets)) {
+    const p = presets.levels[d];
+    const cell = p.cellCluesDensity[1] > 0 ? normalizeWeights(p.cellClues, CELL_NAMES, ALL_CELL_CODES, 'cell') : {};
+    const line = p.lineCluesDensity[1] > 0 ? normalizeWeights(p.lineClues, LINE_NAMES, ALL_LINE_CODES, 'line') : {};
+    const added = [];
+    for (const [kind, weights, codes] of [['cell', cell, ALL_CELL_CODES], ['line', line, ALL_LINE_CODES]]) {
+      for (const code of codes) {
+        if (weights[code]?.[1] > 0 && !seen[kind].has(code)) { seen[kind].add(code); added.push({ kind, code }); }
+      }
+    }
+    if (added.length) out[d] = added;
+  }
+  return out;
+}
+
 /** Difficulty numbers defined by the presets, ascending. */
 export const difficultiesOf = (presets) => Object.keys(presets.levels).map(Number).sort((a, b) => a - b);

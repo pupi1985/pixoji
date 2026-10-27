@@ -237,6 +237,50 @@ export function* solveIter(puz, opts = {}) {
   }
 }
 
+/**
+ * Cost of one deduction, the building block of the complexity score:
+ *  - a direct deduction costs 1 + the number of known cells it has to combine (a clue that only needs two neighbours is cheaper
+ *    than a row clue that needs six cells);
+ *  - an assumption ("suppose X is a bomb ... contradiction", or a case split) costs 1 + the size of its proof, times 10 for every
+ *    level of nesting: one assumption is about ten times harder than a direct deduction, an assumption inside one about a hundred.
+ */
+export function stepCost(f) {
+  const depth = f.depth || 0;
+  return depth === 0 ? 1 + f.premises().length : (1 + proofSize(f)) * 10 ** depth;
+}
+
+/**
+ * COMPLEXITY of a level: the sum of stepCost over every deduction the human-style solver needs to solve it from scratch.
+ * It is a plain number with no unit (compare levels with each other, the absolute scale does not matter) that grows with
+ * - the number of deductions (bigger grids, fewer clues),
+ * - how many cells each deduction has to combine (sparse or "long range" clues such as row counts and areas),
+ * - and above all how much nested assumption reasoning is required.
+ * Also reports `chain`: the longest chain of deductions that each rely on the previous one (a level with a long chain has to be
+ * solved in a fixed order, one cell unlocking the next).
+ * Returns { solved, complexity, chain, rating (deepest assumption level), steps, byDepth }.
+ */
+export function measureComplexity(puz, opts = {}) {
+  const it = solveIter(puz, { maxDepth: 3, ...opts });
+  const tally = new ComplexityTally();
+  let r = it.next();
+  while (!r.done) { tally.add(r.value); r = it.next(); }
+  return { solved: !!r.value.solved, ...tally.summary() };
+}
+
+/** Adds up the cost of the deductions of a solve as they are produced (used by measureComplexity and the solver command). */
+export class ComplexityTally {
+  constructor() { this.complexity = 0; this.chain = 0; this.rating = 0; this.steps = 0; this.byDepth = {}; this.layer = new Map(); }
+  add(f) {
+    const d = f.depth || 0;
+    this.complexity += stepCost(f);
+    const level = 1 + Math.max(0, ...f.deps().map((x) => this.layer.get(x) ?? 0));
+    this.layer.set(f, level);
+    this.chain = Math.max(this.chain, level);
+    this.steps++; this.rating = Math.max(this.rating, d); this.byDepth[d] = (this.byDepth[d] || 0) + 1;
+  }
+  summary() { return { complexity: this.complexity, chain: this.chain, rating: this.rating, steps: this.steps, byDepth: this.byDepth }; }
+}
+
 /** Solves silently and reports the hypothesis depth the puzzle needs ("rating"). */
 export function rateSolve(puz, opts = {}) {
   const it = solveIter(puz, opts);

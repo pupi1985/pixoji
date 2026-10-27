@@ -26,7 +26,8 @@
  *                { "rect": [r0, c0, r1, c1] }                       soft tint on a block of cells
  *              Any item may add "style": "primary" (default, gold: the thing being explained), "secondary" (blue: related
  *              cells), "bomb" (red) or "safe" (green). When items overlap, the later one wins.
- *   mark       sets cells when the step starts (to show an example): bombs = marked as bomb, safe = pressed, clear = empty.
+ *   mark       sets cells when the step starts (to show an example): bombs = marked as bomb, safe = pressed, clear = empty
+ *              ("clear": "all" empties the whole board: use it before the last "play" step so the player starts from scratch).
  *              Going back restores the board as the tutorial left it before that step.
  */
 
@@ -88,12 +89,13 @@ export function validateTutorial(raw, { width, height }) {
       return { kind: 'rect', style, rect: [Math.min(r0, r1), Math.min(c0, c1), Math.max(r0, r1), Math.max(c0, c1)] };
     });
 
-    const mark = { bombs: [], safe: [], clear: [] };
+    const mark = { bombs: [], safe: [], clear: [], clearAll: false };
     if (step.mark !== undefined) {
       if (!step.mark || typeof step.mark !== 'object' || Array.isArray(step.mark)) bad(`${at}.mark`, 'must be { "bombs": [...], "safe": [...], "clear": [...] }');
       for (const [key, v] of Object.entries(step.mark)) {
-        if (!(key in mark)) bad(`${at}.mark`, `unknown key "${key}" (allowed: bombs, safe, clear)`);
-        mark[key] = cells(v, `${at}.mark.${key}`);
+        if (key !== 'bombs' && key !== 'safe' && key !== 'clear') bad(`${at}.mark`, `unknown key "${key}" (allowed: bombs, safe, clear)`);
+        if (key === 'clear' && v === 'all') mark.clearAll = true;
+        else mark[key] = cells(v, `${at}.mark.${key}`);
       }
     }
 
@@ -112,6 +114,37 @@ export function validateTutorial(raw, { width, height }) {
     }
     return { kind, text: text.trim(), highlight, mark, until };
   });
+}
+
+/**
+ * Checks a validated tutorial against the level's real solution (bombs = the 0/1 matrix) and returns a list of problems, empty if
+ * it is consistent: cells that a step marks (or waits for) as bombs must be bombs, cells it marks / waits for as safe must be safe,
+ * and cells highlighted with the "bomb" / "safe" style must be bombs / safe. A tutorial that says something false about its own
+ * level is a mistake the player would notice, so the build refuses it.
+ */
+export function checkTutorialAgainstSolution(steps, bombs) {
+  const problems = [];
+  const isBomb = (r, c) => bombs[r][c] === 1;
+  const expect = (list, wantBomb, where) => {
+    for (const [r, c] of list) if (isBomb(r, c) !== wantBomb) problems.push(`tutorial step ${where}: cell [${r}, ${c}] is ${wantBomb ? 'not a bomb' : 'a bomb'} in this level`);
+  };
+  const height = bombs.length, width = bombs[0].length;
+  const board = new Int8Array(width * height);   // the board as the tutorial's own marks leave it (chains are not modelled)
+  const solved = () => { let any = false; for (let r = 0; r < height; r++) for (let c = 0; c < width; c++) { if (bombs[r][c] === 1) { any = true; if (board[r * width + c] !== 1) return false; } else if (board[r * width + c] === 1) return false; } return any; };
+  steps.forEach((step, i) => {
+    const at = `${i + 1}`;
+    for (const m of marksUpTo([step], 0)) { if (m.all) board.fill(0); else board[m.r * width + m.c] = m.state; }
+    if (step.kind === 'play' && step.until.mode === 'solved' && solved()) problems.push(`tutorial step ${at}: the marks of the earlier steps already solve the whole level, so there is nothing left to do here: add "mark": { "clear": "all" } to this step`);
+    if (untilMet(step, board, width)) problems.push(`tutorial step ${at}.until: the cells it waits for are already marked when the step starts: clear them first ("mark": { "clear": [...] })`);
+    expect(step.mark.bombs, true, `${at} mark.bombs`); expect(step.mark.safe, false, `${at} mark.safe`);
+    expect(step.until.bombs, true, `${at} until.bombs`); expect(step.until.safe, false, `${at} until.safe`);
+    step.highlight.forEach((item, k) => {
+      if (item.kind !== 'cells') return;
+      if (item.style === 'bomb') expect(item.cells, true, `${at} highlight[${k}] (style "bomb")`);
+      if (item.style === 'safe') expect(item.cells, false, `${at} highlight[${k}] (style "safe")`);
+    });
+  });
+  return problems;
 }
 
 /**
@@ -134,11 +167,12 @@ export function resolveHighlight(items, width, height) {
   return { strong: [...strong.values()], soft: [...soft.values()], rows: [...rows.values()], cols: [...cols.values()] };
 }
 
-/** The cell states the tutorial itself sets from step 0 up to and including step `upTo`, in order: [{ r, c, state }]. */
+/** The cell states the tutorial itself sets from step 0 up to and including step `upTo`, in order: [{ r, c, state }] (or { all: true, state: 0 } for "clear all"). */
 export function marksUpTo(steps, upTo) {
   const out = [];
   for (let i = 0; i <= upTo && i < steps.length; i++) {
-    const { clear, safe, bombs } = steps[i].mark;
+    const { clear, safe, bombs, clearAll } = steps[i].mark;
+    if (clearAll) out.push({ all: true, state: 0 });
     clear.forEach(([r, c]) => out.push({ r, c, state: 0 }));
     safe.forEach(([r, c]) => out.push({ r, c, state: 2 }));
     bombs.forEach(([r, c]) => out.push({ r, c, state: 1 }));

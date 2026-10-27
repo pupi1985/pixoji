@@ -18,8 +18,9 @@ import { parseCli, formatUsage, fail } from './cli-utils.js';
 import { levelId, contentVersion } from './level-tools.js';
 import { parseLevel, specFromLevel, makePuzzle } from '../shared/logic-core.js';
 import { countSolutions } from '../shared/solver-core.js';
-import { validateTutorial } from '../shared/tutorial.js';
+import { validateTutorial, checkTutorialAgainstSolution } from '../shared/tutorial.js';
 import { INDEX_SCHEMA, entryKey } from '../shared/level-index.js';
+import { readPresetsFile } from './presets-file.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SPECS = [
@@ -55,7 +56,10 @@ export function collectLevels(src, { verify = false, knownDifficulties = null } 
       try { parseLevel(data); } catch (e) { report.errors.push(`${where}: ${e.message}`); continue; }
       if (!data.clues || !Array.isArray(data.bombs)) { report.errors.push(`${where}: a level needs "bombs" and "clues"`); continue; }
       if (data.tutorial !== undefined) {
-        try { validateTutorial(data.tutorial, data.grid); } catch (e) { report.errors.push(`${where}: ${e.message}`); continue; }
+        let steps;
+        try { steps = validateTutorial(data.tutorial, data.grid); } catch (e) { report.errors.push(`${where}: ${e.message}`); continue; }
+        const wrong = checkTutorialAgainstSolution(steps, data.bombs);
+        if (wrong.length) { wrong.forEach((w) => report.errors.push(`${where}: ${w}`)); continue; }
       }
       if (verify) {
         const r = countSolutions(makePuzzle(specFromLevel(parseLevel(data))), 2);
@@ -101,8 +105,8 @@ function main() {
   if (opts.help) { console.log(usage()); return; }
   if (errors.length) fail(errors, usage());
   const src = path.resolve(opts.src ?? path.join(root, 'levels')), out = path.resolve(opts.out ?? path.join(root, 'public', 'levels'));
-  let known = null;
-  try { known = Object.keys(JSON.parse(fs.readFileSync(path.join(root, 'shared', 'presets.json'), 'utf8')).levels).map(Number); } catch { /* optional */ }
+  let known;
+  try { known = Object.keys(readPresetsFile().levels).map(Number); } catch (e) { fail([e.message], usage()); }
   let result;
   try { result = buildLevels(src, out, { verify: !!opts.verify, dryRun: !!opts['dry-run'], knownDifficulties: known }); } catch (e) { fail([e.message], usage()); }
   const { index, report, levels } = result;

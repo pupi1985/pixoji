@@ -1,0 +1,20 @@
+{
+  "grid": { "width": 4, "height": 4 },
+  "bombs": [
+    [0, 0, 1, 0],
+    [0, 0, 1, 0],
+    [0, 0, 1, 0],
+    [0, 0, 1, 1]
+  ],
+  "clues": {
+    "top": [0, 0, 0, 0],
+    "left": [0, 0, 0, 0],
+    "grid": [
+    [1, 1, 0, 1],
+    [0, 1, 1, 1],
+    [1, 1, 1, 1],
+    [1, 1, 1, 1]
+    ]
+  },
+  "meta": {"rating":0,"complexity":48,"chain":4,"steps":16,"stepsByDepth":{"0":16},"clueDensity":0.88,"work":121,"bombRatio":0.31,"lineClues":0,"cellTypes":[1],"lineTypes":[],"seed":43685795,"level":1}
+}

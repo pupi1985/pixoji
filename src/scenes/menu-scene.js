@@ -1,8 +1,9 @@
 import { Container, Graphics, Rectangle, Text } from 'pixi.js';
 import { GRID_CONFIG, UI_CONFIG } from '../config.js';
-import { PRESETS, DIFFICULTIES } from '../game/presets.js';
+import { PRESETS, DIFFICULTIES, INTRODUCED } from '../game/presets.js';
 import { isLevelCompleted } from '../progress.js';
 import { createTextButton } from '../ui/widgets.js';
+import { createClueIcon } from '../ui/clue-icon.js';
 import { APP_VERSION, BUILD_DATE } from '../version.js';
 
 const gap = 16;
@@ -17,7 +18,7 @@ function makeText(text, { size = 16, fill = 0xffffff, bold = true, wrapWidth = 0
 }
 
 /** A rounded tile with a main label and a small caption. */
-function makeTile({ width, height, label, caption, labelSize = 26, enabled = true, dim = false, onTap }) {
+function makeTile({ width, height, label, caption, labelSize = 26, enabled = true, dim = false, icons = [], onTap }) {
   const tile = new Container();
   const bg = new Graphics();
   const paint = (c) => bg.clear().roundRect(0, 0, width, height, 12).fill({ color: c });
@@ -29,6 +30,20 @@ function makeTile({ width, height, label, caption, labelSize = 26, enabled = tru
   if (sub) sub.position.set(width / 2, main.y + main.height + 2);
   tile.addChild(bg, main);
   if (sub) tile.addChild(sub);
+
+  // icons of the clues this difficulty adds, in the top-left corner
+  if (icons.length) {
+    const margin = 5, space = 3;
+    const size = Math.max(18, Math.min(34, Math.round(Math.min((width - 2 * margin - (icons.length - 1) * space) / icons.length, width * 0.38))));
+    icons.forEach((clue, i) => {
+      const icon = createClueIcon(clue, size);
+      icon.position.set(margin + i * (size + space), margin);
+      tile.addChild(icon);
+    });
+    // on small tiles the number would sit on the icons: move it just clear of them
+    const iconsRight = margin + icons.length * size + (icons.length - 1) * space;
+    if (main.y < margin + size) main.x = Math.min(width - 2 - main.width / 2, Math.max(main.x, iconsRight + 3 + main.width / 2));
+  }
 
   tile.hitArea = new Rectangle(0, 0, width, height);
   if (enabled) {
@@ -236,14 +251,18 @@ export class MenuScene extends Container {
     });
   }
 
-  /** Square tile size and column count that fit `count` tiles on screen. */
-  tileLayout(count, w, h, maxCols = 5) {
-    const cols = Math.max(1, Math.min(count, maxCols, Math.floor((w - 32 + gap) / (64 + gap))));
-    const rows = Math.ceil(count / cols);
-    const byW = Math.floor((w - 32 - (cols - 1) * gap) / cols);
-    const byH = Math.floor((h - 230 - (rows - 1) * gap) / rows);
-    const size = Math.max(52, Math.min(88, byW, byH));
-    return { cols, rows, size };
+  /** The column count that gives the biggest square tiles (at most 88 px, at least 52) for `count` tiles on this screen. */
+  tileLayout(count, w, h, maxCols = 8) {
+    let best = null;
+    for (let cols = 1; cols <= Math.max(1, Math.min(count, maxCols)); cols++) {
+      const rows = Math.ceil(count / cols);
+      const byW = Math.floor((w - 32 - (cols - 1) * gap) / cols);
+      const byH = Math.floor((h - 230 - (rows - 1) * gap) / rows);
+      const size = Math.min(88, byW, byH);
+      // bigger tiles win; among equal sizes prefer the squarer block
+      if (!best || size > best.size || (size === best.size && Math.abs(cols - Math.sqrt(count)) < Math.abs(best.cols - Math.sqrt(count)))) best = { cols, rows, size };
+    }
+    return { ...best, size: Math.max(52, best.size) };
   }
 
   /** Places the tiles centred below the title; returns the y of the bottom edge of the block. */
@@ -271,7 +290,7 @@ export class MenuScene extends Container {
   drawDifficulties(w, h) {
     this.addBackButton();
     const title = this.addTitle(this.mode === 'predefined' ? 'PREDEFINED · DIFFICULTY' : 'RANDOM · DIFFICULTY', w, 66, 26);
-    const layout = this.tileLayout(DIFFICULTIES.length, w, h, 5);
+    const layout = this.tileLayout(DIFFICULTIES.length, w, h);
     const tiles = DIFFICULTIES.map((d) => {
       const [pw, ph] = PRESETS.levels[d].size;
       let caption = `${pw}×${ph}`, enabled = true;
@@ -281,7 +300,7 @@ export class MenuScene extends Container {
         else caption = `${entries.filter((e) => isLevelCompleted(e.id)).length}/${entries.length} done`;
       }
       return makeTile({
-        width: layout.size, height: layout.size, label: `${d}`, caption, enabled,
+        width: layout.size, height: layout.size, label: `${d}`, caption, enabled, icons: INTRODUCED[d] ?? [],
         onTap: () => {
           this.difficulty = d;
           if (this.mode === 'predefined') this.go('levels');
@@ -297,7 +316,7 @@ export class MenuScene extends Container {
     this.addBackButton();
     const title = this.addTitle(`DIFFICULTY ${this.difficulty} · LEVELS`, w, 66, 26);
     const entries = this.catalog.entries(this.difficulty);
-    const layout = this.tileLayout(entries.length, w, h, 5);
+    const layout = this.tileLayout(entries.length, w, h);
     const offline = this.catalog.status !== 'online';
     const tiles = entries.map((entry, i) => {
       const saved = this.catalog.isDownloaded(entry);
