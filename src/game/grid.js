@@ -3,10 +3,13 @@ import { GridCell } from './cell.js';
 import { GRID_CONFIG } from '../config.js';
 import { addLineClueShape } from './clue-icons.js';
 
-export class ButtonGrid extends Container {
+/** The playing board: the cells, the in-grid chain fences and the line clue badges. */
+export class Board extends Container {
   constructor() {
     super();
     this.cells = [];
+    this.rowBadges = [];   // the left / top line clue badges by row / column, so they can be faded when settled
+    this.colBadges = [];
     this.cells2D = []; 
     this.layoutInfo = null;
     
@@ -135,7 +138,7 @@ export class ButtonGrid extends Container {
    */
   rebuild(region, targetRows = 6, targetCols = 6, levelData = null, onCellActivate = () => {}) {
     const dispose = (container) => container.removeChildren().forEach((child) => child.destroy({ children: true }));
-    dispose(this.cellsContainer); dispose(this.cluesContainer); this.cells = [];
+    dispose(this.cellsContainer); dispose(this.cluesContainer); this.cells = []; this.rowBadges = []; this.colBadges = [];
     this.cells2D = Array.from({ length: targetRows }, () => Array(targetCols).fill(null));
 
     const { minCellSize, maxCellSize, preferredCellSize, cell, clueBand } = GRID_CONFIG;
@@ -248,7 +251,7 @@ const columnBombs = [], columnClues = [];
 for (let r = 0; r < targetRows; r++) { columnBombs.push(bombMatrix[r][c]); columnClues.push(clueMatrix[r][c]); }
 const value = this.computeLineClueValue(columnBombs, columnClues, type); if (value === "") continue;
 const badge = this.createClueBadge(value, type, cellSize, "top");
-badge.x = startX + c * cellSize + cellSize / 2; badge.y = startY - cellSize * 0.6; this.cluesContainer.addChild(badge);
+badge.x = startX + c * cellSize + cellSize / 2; badge.y = startY - cellSize * 0.6; this.cluesContainer.addChild(badge); this.colBadges[c] = badge;
 }
 }
 if (Array.isArray(levelData.clues.left)) {
@@ -256,8 +259,19 @@ for (let r = 0; r < targetRows; r++) {
 const type = levelData.clues.left[r]; if (type === 0) continue;
 const value = this.computeLineClueValue(bombMatrix[r], clueMatrix[r], type); if (value === "") continue;
 const badge = this.createClueBadge(value, type, cellSize, "left");
-badge.x = startX - cellSize * 0.72; badge.y = startY + r * cellSize + cellSize / 2; this.cluesContainer.addChild(badge);
+badge.x = startX - cellSize * 0.72; badge.y = startY + r * cellSize + cellSize / 2; this.cluesContainer.addChild(badge); this.rowBadges[r] = badge;
 }
 }
 }
+
+  /**
+   * Fades the clues the player's marks have settled (see shared/fulfilled.js) and restores all the others.
+   * fulfilled: { cells: Set of cell indexes, rows: Set, cols: Set }
+   */
+  applyFulfilled({ cells, rows, cols }) {
+    for (const cell of this.cells) if (cell.clueType === 1 || cell.clueType === 2 || cell.clueType === 3 || cell.clueType === 6) cell.setFulfilled(cells.has(cell.index));
+    const FADED = 0.38;
+    this.rowBadges.forEach((badge, r) => { if (badge) badge.alpha = rows.has(r) ? FADED : 1; });
+    this.colBadges.forEach((badge, c) => { if (badge) badge.alpha = cols.has(c) ? FADED : 1; });
+  }
 }

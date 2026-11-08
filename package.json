@@ -1,6 +1,6 @@
 {
-  "name": "pixi-button-grid",
-  "version": "1.4.0",
+  "name": "pixoji",
+  "version": "1.5.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -34,6 +34,7 @@
     "public/manifest.webmanifest",
     "pwa/sw.template.js",
     "shared/clue-types.js",
+    "shared/fulfilled.js",
     "shared/generator.js",
     "shared/json-check.js",
     "shared/level-index.js",

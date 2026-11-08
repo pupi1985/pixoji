@@ -81,7 +81,14 @@ export function formatReport({ rows, summary }) {
     const notes = [r.tutorial ? 'tutorial' : '', r.flag ? `! ${r.flag}` : ''].filter(Boolean).join('  ');
     lines.push(`${col(r.difficulty, 5)}${col(r.file, fw)}${col(r.size, 6)}${col(r.clues, 6, true)}${col(r.rating ?? '-', 8, true)}${col(r.steps ?? '-', 7, true)}${col(r.chain ?? '-', 7, true)}${col(r.complexity ?? '-', 12, true)}${col(vs, 11, true)}  ${notes}`);
   }
-  lines.push('', 'Per difficulty (tutorials not counted):', `${col('diff', 5)}${col('levels', 8, true)}${col('min', 8, true)}${col('median', 9, true)}${col('max', 8, true)}`);
+  lines.push('', 'Columns:',
+    '  rating      deepest "what if" reasoning the level needs: 0 = none (every cell follows directly), 1 = "suppose X is a bomb ... contradiction",',
+    '              2 = an assumption inside an assumption. It should stay inside the depth range of the difficulty (flagged with ! otherwise).',
+    '  steps       how many deductions solving the level takes.',
+    '  chain       the longest run of deductions that each depend on the previous one: low = many independent places to start,',
+    '              high = the level has to be solved in a fixed order, one cell unlocking the next. Not part of the complexity score.',
+    '  complexity  the total cost of all the deductions (a direct one costs 1 + the cells it combines; each level of assumption multiplies by 10).',
+    '', 'Per difficulty (tutorials not counted):', `${col('diff', 5)}${col('levels', 8, true)}${col('min', 8, true)}${col('median', 9, true)}${col('max', 8, true)}`);
   for (const [d, s] of Object.entries(summary)) lines.push(`${col(d, 5)}${col(s.levels, 8, true)}${col(s.min ?? '-', 8, true)}${col(s.median ?? '-', 9, true)}${col(s.max ?? '-', 8, true)}`);
   return lines.join('\n');
 }

@@ -2,6 +2,12 @@ import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { APP_CONFIG, GRID_CONFIG } from '../config.js';
 import { drawAreaIcon, drawCellClueIcon, drawDashedLine, drawMultiplierRing } from './clue-icons.js';
 
+/** Colour between a and b: t = 0 is a, t = 1 is b. */
+function mixColors(a, b, t) {
+  const channel = (shift) => Math.round(((a >> shift) & 255) * (1 - t) + ((b >> shift) & 255) * t);
+  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+}
+
 /**
  * Robust cell container rendering icons, text, and custom fences persistently across ALL interaction states.
  */
@@ -13,7 +19,8 @@ export class GridCell extends Container {
     this.palette = palette;
     this.onActivate = onActivate;
     this.state = 0;
-    this.index = -1;   // position in the grid's row-major cell list (set by ButtonGrid)
+    this.fulfilled = false;   // the player's marks already settle this clue: drawn faded (see shared/fulfilled.js)
+    this.index = -1;   // position in the grid's row-major cell list (set by Board)
     this.hasBomb = false; 
     this.isClueCell = false; 
     this.clueType = 0; 
@@ -34,6 +41,14 @@ export class GridCell extends Container {
       this.onActivate?.(this, event);
     });
 
+    this.draw();
+  }
+
+  /** Fades the clue (icon and number) when it is settled, restores it when it is not. Only numbered clues are ever faded. */
+  setFulfilled(value) {
+    if (this.fulfilled === value) return;
+    this.fulfilled = value;
+    this.updateClueTextDisplay();
     this.draw();
   }
 
@@ -80,6 +95,7 @@ export class GridCell extends Container {
       this.clueTextNode.y = this.size * 0.51;
     }
 
+    this.clueTextNode.alpha = this.fulfilled ? 0.42 : 1;
     this.addChild(this.clueTextNode);
   }
 
@@ -121,7 +137,9 @@ export class GridCell extends Container {
 
     // --- ICONOS DE LAS PISTAS (TIPOS 1 A 3) ---
     // --- ICONOS DE LAS PISTAS (TIPOS 1 A 3) ---
-    if (this.isClueCell && this.clueType <= 3) drawCellClueIcon(g, this.clueType, cx, cy, r, vectorColor, eyeColor);
+    // a settled clue keeps its shape but fades towards the colour of the cell, so it can still be read
+    const ink = this.fulfilled ? mixColors(vectorColor, f, 0.6) : vectorColor;
+    if (this.isClueCell && this.clueType <= 3) drawCellClueIcon(g, this.clueType, cx, cy, r, ink, eyeColor);
 
     // --- CERCAS PERIMETRALES (TIPO 4) ---
     if (this.clueType === 4) {
@@ -139,7 +157,7 @@ export class GridCell extends Container {
     if (this.clueType === 5) drawMultiplierRing(g, s / 2, s / 2, s * 0.30, vectorColor);
 
     // --- ÁREA CONTIGUA (TIPO 6): paint bucket tipped over, paint flowing out of it ---
-    if (this.clueType === 6) drawAreaIcon(g, cx, cy, r, vectorColor, eyeColor);
+    if (this.clueType === 6) drawAreaIcon(g, cx, cy, r, ink, eyeColor);
 
     if (this.hasBomb && APP_CONFIG.showBombs) {
       g.circle(s / 2, s / 2, s * 0.12).fill({ color: 0xc0392b });

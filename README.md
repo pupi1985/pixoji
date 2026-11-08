@@ -1,4 +1,4 @@
-# Pixi Button Grid
+# Pixoji
 
 Logic-only minesweeper: every level has exactly one solution that can be found without guessing.
 It is a static web app (no server code) that installs as a PWA and runs offline.
@@ -15,6 +15,7 @@ pwa/sw.template.js             the service worker (the build turns it into dist/
 shared/                        pure logic used by the game, the web worker and the tools
   presets.json                 difficulty presets (clue weights, bombs, depth ...)   generator.js, solver-core.js, ...
   level-index.js               format of the generated index.json      tutorial.js   format + validation of level tutorials
+  fulfilled.js                 which clues the player's marks have settled (they are greyed out)
 tools/                         command line tools (Node)
   generate-level.js            create levels                  build-levels.js     publish levels/ -> public/levels/
   level-complexity.js          complexity of every level      solver.js           explain / solve a level (+ complexity)
@@ -124,6 +125,11 @@ npm run levels:complexity                 # every level in levels/: size, clues,
 npm run levels:complexity -- --difficulty 6
 ```
 
+In the table, **rating** is the deepest "what if" reasoning the level needs (0 = every cell follows directly from the clues; 1 = at least one
+"suppose X is a bomb ... contradiction" step; 2 = an assumption inside an assumption), **steps** the number of deductions, and **chain** the
+longest run of deductions that each depend on the previous one (low = many independent places to start, high = a fixed order of solving;
+it is shown for comparison and is not part of the score). The report prints this legend under the table.
+
 The table also shows each level against the median of its difficulty (tutorials are left out of the median) and flags levels whose
 assumption depth is outside the `depth` range of their difficulty in `shared/presets.json`: good candidates to recreate.
 
@@ -153,13 +159,13 @@ needs HTTPS; use the GitHub Pages address on the phone.)
 differs between your folder and a release zip:
 
 ```
-unzip -q pixi-button-grid.zip -d /tmp/pbg
-diff -rq /tmp/pbg/pixi-button-grid . --exclude=node_modules --exclude=dist --exclude=.git --exclude=public
+unzip -q pixoji.zip -d /tmp/pbg
+diff -rq /tmp/pbg/pixoji . --exclude=node_modules --exclude=dist --exclude=.git --exclude=public
 # "Only in /tmp/pbg/...: x.js" = a file you are missing;   "Files ... differ" = an updated file
 # your own levels/ and shared/presets.json are expected to differ: keep them
 ```
 
-To copy every release file except your own levels and presets: `rsync -a --exclude levels --exclude shared/presets.json --exclude node_modules /tmp/pbg/pixi-button-grid/ ./`
+To copy every release file except your own levels and presets: `rsync -a --exclude levels --exclude shared/presets.json --exclude node_modules /tmp/pbg/pixoji/ ./`
 
 ## Caveats
 
@@ -174,6 +180,11 @@ To copy every release file except your own levels and presets: `rsync -a --exclu
 - Mouse: left click = bomb, right click = pressed (no bomb), drag to paint.
 - Touch: every tap cycles empty -> bomb -> pressed -> empty; drag to paint.
 - Undo / redo buttons (Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z), Reset asks for confirmation.
+- **Settled clues fade.** When your marks settle a clue - every cell it depends on is marked (bomb or safe) and the marks give exactly the
+  number shown - the clue is drawn faded but readable; it returns to normal as soon as a mark changes and it no longer holds, or when
+  you undo. This covers cell clues (neighbor: its 3x3 block; isolated and surrounded: that block plus the cells next to it; area: its
+  area must be closed in by cells of the other state) and the clues of rows and columns. Chain and multiplier cells have no number and never
+  fade, and a cleared level shows every clue normally.
 - **← Menu** leaves the level at once if you have not marked anything (or have undone everything, or the level is cleared); if you have
   marked at least one cell, bomb or safe, it asks first, because those marks would be lost. Marks that a tutorial places as examples do not count.
 

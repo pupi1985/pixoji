@@ -46,6 +46,7 @@ export const UI_CONFIG = {
   hudHeight: 100,      // space above the grid: button row + title row
   hudHeightCompact: 60, // short wide screens (a phone on its side): one row, the title sits between the buttons
   bottomHeight: 56,    // space below the grid: "level cleared" banner
+  bottomHeightTwoRows: 104, // the same on a narrow screen, where the Next button sits on a second row under the banner
   undoColor: 0xe67e22,
   redoColor: 0x16a085,
   resetColor: 0xc0392b,

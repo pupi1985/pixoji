@@ -1,6 +1,6 @@
 {
-  "name": "Pixi Button Grid",
-  "short_name": "Button Grid",
+  "name": "Pixoji",
+  "short_name": "Pixoji",
   "description": "Logic-only minesweeper: every level can be solved without guessing.",
   "start_url": "./",
   "scope": "./",

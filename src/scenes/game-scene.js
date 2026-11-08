@@ -1,9 +1,10 @@
 import { Container, Graphics, Rectangle, Text } from 'pixi.js';
-import { ButtonGrid } from '../game/grid.js';
+import { Board } from '../game/grid.js';
 import { History } from '../game/history.js';
 import { createTutorial } from '../game/tutorial.js';
 import { drawHighlights } from '../game/tutorial-highlights.js';
 import { marksUpTo, untilMet } from '../../shared/tutorial.js';
+import { createFulfilledChecker } from '../../shared/fulfilled.js';
 import { ConfirmDialog, createIconButton, createTextButton, drawCircularArrow } from '../ui/widgets.js';
 import { TutorialPanel } from '../ui/tutorial-panel.js';
 import { UI_CONFIG } from '../config.js';
@@ -44,7 +45,7 @@ export class GameScene extends Container {
     this.pendingTutorialMarks = false;
 
     this.eventMode = 'static';
-    this.grid = new ButtonGrid();
+    this.grid = new Board();
     this.highlights = new Graphics();
     this.highlights.eventMode = 'none';
     this.catcher = new Container();  // covers the board during locked tutorial steps: a tap anywhere continues
@@ -100,6 +101,8 @@ export class GameScene extends Container {
     this.winText.visible = this.hasWon;
     this.drag = IDLE_DRAG();
     this.dialog.close();
+    this.fulfilledChecker = null;
+    try { this.fulfilledChecker = createFulfilledChecker(levelData); } catch { /* a level the checker cannot read simply never greys its clues */ }
     this.levelHasTutorial = !!levelData.tutorial;
     this.tutorial = null;
     if (this.levelHasTutorial && !this.hasWon && !saved?.tutorial?.finished) {
@@ -161,19 +164,30 @@ export class GameScene extends Container {
     if (this.levelData) this.buildGrid();
   }
 
-  /** Bottom strip once the level is cleared: the banner and, next to it, the "Next" button. */
+  /** A screen too narrow to put the Next button beside the banner: it gets a second row under it instead. */
+  twoRowWin() { return this.size.w < 520 && !!this.callbacks.nextLabel; }
+
+  /** Height of the strip under the board that holds the "level cleared" banner (and the Next button). Fixed, so the board never moves when the level is cleared. */
+  bottomStrip() { return this.twoRowWin() ? UI_CONFIG.bottomHeightTwoRows : UI_CONFIG.bottomHeight; }
+
+  /**
+   * Bottom strip once the level is cleared. The banner is always centred on the screen. The Next button sits at the right edge of the
+   * same row on a wide screen (the banner shrinks if it would touch it), and centred on a second row below the banner on a narrow one.
+   */
   layoutWinRow() {
     const { w, h } = this.size, { margin, bottomHeight, buttonSize } = UI_CONFIG;
     const label = this.hasWon ? this.callbacks.nextLabel?.(this.session) ?? null : null;
     this.nextBtn.visible = !!label;
     if (label) this.nextBtn.setLabel(label);
-    const room = w - 2 * margin - (label ? NEXT_WIDTH + margin : 0);
+    const top = h - this.bottomStrip(), twoRows = this.twoRowWin();
+    const room = twoRows || !label ? w - 2 * margin : w - 2 * (margin + NEXT_WIDTH + 8);   // symmetric around the centre, so the banner stays centred
     this.winText.scale.set(1);
     const winW = this.winText.width;
     const k = Math.min(1, room / Math.max(1, winW));
     this.winText.scale.set(k);
-    this.winText.position.set(Math.floor(margin + (room - winW * k) / 2), Math.floor(h - bottomHeight + (bottomHeight - this.winText.height) / 2));
-    this.nextBtn.position.set(w - margin - NEXT_WIDTH, Math.floor(h - bottomHeight + (bottomHeight - buttonSize) / 2));
+    this.winText.position.set(Math.floor((w - winW * k) / 2), Math.floor(top + (bottomHeight - this.winText.height) / 2));
+    if (twoRows) this.nextBtn.position.set(Math.floor((w - NEXT_WIDTH) / 2), Math.floor(top + bottomHeight + (this.bottomStrip() - bottomHeight - buttonSize) / 2));
+    else this.nextBtn.position.set(w - margin - NEXT_WIDTH, Math.floor(top + (bottomHeight - buttonSize) / 2));
   }
 
   /** A phone on its side: too little height for two header rows. */
@@ -196,13 +210,21 @@ export class GameScene extends Container {
 
   buildGrid() {
     const { w, h } = this.size;
-    const bottom = this.tutorialActive() ? this.panelHeight() : UI_CONFIG.bottomHeight;
+    const bottom = this.tutorialActive() ? this.panelHeight() : this.bottomStrip();
     const region = { x: 0, y: this.hudHeight(), width: w, height: Math.max(1, h - this.hudHeight() - bottom) };
     const { height: rows, width: cols } = this.levelData.grid;
     this.grid.rebuild(region, rows, cols, this.levelData, (cell, event) => this.onCellDown(cell, event));
     this.grid.cells.forEach((cell) => { if (this.cellStates[cell.index]) cell.setState(this.cellStates[cell.index]); });
     if (this.pendingTutorialMarks) { this.pendingTutorialMarks = false; this.applyMarks(marksUpTo(this.tutorial.steps, this.tutorial.index)); }
+    this.refreshFulfilled();
     this.refreshTutorialUi();
+  }
+
+  /** Fades the clues that the current marks settle (never on a cleared level: there every clue is settled and should stay readable). */
+  refreshFulfilled() {
+    if (!this.fulfilledChecker || !this.grid.layoutInfo) return;
+    const none = { cells: new Set(), rows: new Set(), cols: new Set() };
+    this.grid.applyFulfilled(this.hasWon ? none : this.fulfilledChecker.check(this.cellStates));
   }
 
   // ------------------------------------------------------------------ tutorial
@@ -227,7 +249,7 @@ export class GameScene extends Container {
   /** Sets cells to the given [{ r, c, state }] without recording undo history (chains move together). */
   applyMarks(marks) {
     for (const { r, c, state, all } of marks) {
-      if (all) { for (const cell of this.grid.cells) this.setCellState(cell, state); continue; }
+      if (all) { for (const cell of this.grid.cells) this.setCellState(cell, state); this.refreshFulfilled(); continue; }
       const cell = this.grid.cells2D[r]?.[c];
       if (cell) this.applyToCell(cell, state);
     }
@@ -257,6 +279,7 @@ export class GameScene extends Container {
     if (!this.tutorialActive() || this.dialog.visible || !this.tutorial.back()) return;
     this.endGesture();
     for (const cell of this.grid.cells) this.setCellState(cell, 0);
+    this.refreshFulfilled();
     this.applyMarks(marksUpTo(this.tutorial.steps, this.tutorial.index));
     this.history.clear();
     this.enterTutorialStep(false);
@@ -330,6 +353,7 @@ export class GameScene extends Container {
   applyToCell(cell, state) {
     const targets = cell.chainId === null ? [cell] : this.grid.cells.filter((c) => c.chainId === cell.chainId);
     for (const c of targets) this.setCellState(c, state);
+    this.refreshFulfilled();
   }
 
   setCellState(cell, state) {
@@ -350,6 +374,7 @@ export class GameScene extends Container {
     this.hasWon = true;
     this.winText.visible = true;
     this.callbacks.onWin?.(this.session);
+    this.refreshFulfilled();
     this.layoutWinRow();
     if (this.tutorialActive()) this.finishTutorial();   // solving the level ends the tutorial
   }
@@ -359,6 +384,7 @@ export class GameScene extends Container {
     const changes = this.history.undo();
     if (!changes) return;
     for (const c of changes) this.setCellState(this.grid.cells[c.index], c.from);
+    this.refreshFulfilled();
     this.updateButtons();
     this.changed();
     this.checkTutorialProgress();
@@ -369,6 +395,7 @@ export class GameScene extends Container {
     const changes = this.history.redo();
     if (!changes) return;
     for (const c of changes) this.setCellState(this.grid.cells[c.index], c.to);
+    this.refreshFulfilled();
     this.updateButtons();
     this.changed();
     this.checkTutorialProgress();
@@ -408,6 +435,7 @@ export class GameScene extends Container {
 
   resetLevel() {
     for (const cell of this.grid.cells) this.setCellState(cell, 0);
+    this.refreshFulfilled();
     this.history.clear();
     this.hasWon = false;
     this.winText.visible = false;
