@@ -1,6 +1,6 @@
 {
   "name": "pixoji",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -44,6 +44,7 @@
     "shared/presets.json",
     "shared/solver-core.js",
     "shared/tutorial.js",
+    "src/app-flow.js",
     "src/config.js",
     "src/game/catalog.js",
     "src/game/cell.js",

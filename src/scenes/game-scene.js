@@ -101,6 +101,7 @@ export class GameScene extends Container {
     this.winText.visible = this.hasWon;
     this.drag = IDLE_DRAG();
     this.dialog.close();
+    this.panelKey = null;   // the tutorial text box is sized for the longest text of THIS level
     this.fulfilledChecker = null;
     try { this.fulfilledChecker = createFulfilledChecker(levelData); } catch { /* a level the checker cannot read simply never greys its clues */ }
     this.levelHasTutorial = !!levelData.tutorial;
@@ -216,15 +217,20 @@ export class GameScene extends Container {
     this.grid.rebuild(region, rows, cols, this.levelData, (cell, event) => this.onCellDown(cell, event));
     this.grid.cells.forEach((cell) => { if (this.cellStates[cell.index]) cell.setState(this.cellStates[cell.index]); });
     if (this.pendingTutorialMarks) { this.pendingTutorialMarks = false; this.applyMarks(marksUpTo(this.tutorial.steps, this.tutorial.index)); }
+    if (this.hasWon) this.pressRemainingSafeCells();   // a cleared level that is restored (reload, resize) looks the same
     this.refreshFulfilled();
     this.refreshTutorialUi();
   }
 
-  /** Fades the clues that the current marks settle (never on a cleared level: there every clue is settled and should stay readable). */
+  /** Fades the clues that the current marks settle. On a cleared level that is every clue. */
   refreshFulfilled() {
     if (!this.fulfilledChecker || !this.grid.layoutInfo) return;
-    const none = { cells: new Set(), rows: new Set(), cols: new Set() };
-    this.grid.applyFulfilled(this.hasWon ? none : this.fulfilledChecker.check(this.cellStates));
+    this.grid.applyFulfilled(this.fulfilledChecker.check(this.cellStates));
+  }
+
+  /** Presses every cell that has no bomb and was left unmarked: a cleared level has all its cells marked. Not part of the undo history. */
+  pressRemainingSafeCells() {
+    for (const cell of this.grid.cells) if (!cell.hasBomb && cell.state === 0) this.setCellState(cell, 2);
   }
 
   // ------------------------------------------------------------------ tutorial
@@ -374,6 +380,7 @@ export class GameScene extends Container {
     this.hasWon = true;
     this.winText.visible = true;
     this.callbacks.onWin?.(this.session);
+    this.pressRemainingSafeCells();   // every cell is marked now, so every clue is settled and drawn faded
     this.refreshFulfilled();
     this.layoutWinRow();
     if (this.tutorialActive()) this.finishTutorial();   // solving the level ends the tutorial

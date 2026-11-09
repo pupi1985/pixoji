@@ -106,6 +106,8 @@ git add levels && git commit -m "new levels" && git push    # the workflow gener
 - **Tutorials** are written inside the level file: see `docs/tutorials.md`. Levels with one show a **?** in the list. The project ships
   one tutorial level for every clue type as `levels/<difficulty>/00-tutorial.json` (difficulty 1 neighbor, 2 row/column count, 3 isolated,
   4 surrounded, 5 chain, 6 area, 7 multiplier, 8 longest-run, 9 groups): the first level of the difficulty that introduces the clue.
+- **Moving on.** The **Next** button never shows the menu in between: if the next level is on the device the game goes straight to it; if it has
+  to be downloaded or generated you see the "downloading" / "generating" screen directly.
 - **The menu** shows, on each difficulty tile, the icon of the clue that difficulty adds for the first time (worked out from
   `shared/presets.json`, so it follows your edits). After a level is cleared a **Next** button moves on to the next level, or to the first
   level of the next difficulty that has levels; after a random level it generates another one; after the very last level it offers the menu.
@@ -184,7 +186,8 @@ To copy every release file except your own levels and presets: `rsync -a --exclu
   number shown - the clue is drawn faded but readable; it returns to normal as soon as a mark changes and it no longer holds, or when
   you undo. This covers cell clues (neighbor: its 3x3 block; isolated and surrounded: that block plus the cells next to it; area: its
   area must be closed in by cells of the other state) and the clues of rows and columns. Chain and multiplier cells have no number and never
-  fade, and a cleared level shows every clue normally.
+  fade. When a level is cleared, the cells you had not pressed are pressed for you (every cell is marked then), so every clue shows as
+  settled and the board stays that way.
 - **← Menu** leaves the level at once if you have not marked anything (or have undone everything, or the level is cleared); if you have
   marked at least one cell, bomb or safe, it asks first, because those marks would be lost. Marks that a tutorial places as examples do not count.
 
