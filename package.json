@@ -1,6 +1,6 @@
 {
   "name": "pixoji",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -26,6 +26,7 @@
   },
   "requiredFiles": [
     "index.html",
+    ".github/workflows/deploy.yml",
     "package.json",
     "public/icons/apple-touch-icon.png",
     "public/icons/icon-192.png",

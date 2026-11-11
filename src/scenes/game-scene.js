@@ -225,7 +225,7 @@ export class GameScene extends Container {
   /** Fades the clues that the current marks settle. On a cleared level that is every clue. */
   refreshFulfilled() {
     if (!this.fulfilledChecker || !this.grid.layoutInfo) return;
-    this.grid.applyFulfilled(this.fulfilledChecker.check(this.cellStates));
+    this.grid.applyFulfilled(this.fulfilledChecker.check(this.cellStates, { solved: this.hasWon }));
   }
 
   /** Presses every cell that has no bomb and was left unmarked: a cleared level has all its cells marked. Not part of the undo history. */

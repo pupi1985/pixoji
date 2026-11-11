@@ -269,7 +269,7 @@ badge.x = startX - cellSize * 0.72; badge.y = startY + r * cellSize + cellSize /
    * fulfilled: { cells: Set of cell indexes, rows: Set, cols: Set }
    */
   applyFulfilled({ cells, rows, cols }) {
-    for (const cell of this.cells) if (cell.clueType === 1 || cell.clueType === 2 || cell.clueType === 3 || cell.clueType === 6) cell.setFulfilled(cells.has(cell.index));
+    for (const cell of this.cells) if (cell.clueType === 1 || cell.clueType === 2 || cell.clueType === 3 || cell.clueType === 5 || cell.clueType === 6) cell.setFulfilled(cells.has(cell.index));
     const FADED = 0.38;
     this.rowBadges.forEach((badge, r) => { if (badge) badge.alpha = rows.has(r) ? FADED : 1; });
     this.colBadges.forEach((badge, c) => { if (badge) badge.alpha = cols.has(c) ? FADED : 1; });

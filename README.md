@@ -29,9 +29,12 @@ src/                           the game (PixiJS)
 
 ## 1. Publish on GitHub Pages (once)
 
-1. Create a GitHub repository and push this project to the `main` branch (include your `levels/` folder). Commit `package-lock.json` too (run `npm install` once to create it).
+The site is served from the **built** output (`dist/`), never from `src/`: `src/` is source code that the browser cannot run as it is. The workflow
+`.github/workflows/deploy.yml` builds it for you on GitHub, so you never commit `dist/` (nor `public/levels/`, which the build generates).
+
+1. Create the repository `pixoji` under your account and push this project to its `main` branch (include `levels/`, `.github/` and `shared/presets.json`).
 2. In the repository: **Settings -> Pages -> Build and deployment -> Source: GitHub Actions**.
-3. The *Deploy to GitHub Pages* workflow runs on every push to `main`. When it finishes, the game is at `https://<user>.github.io/<repository>/`.
+3. The *Deploy to GitHub Pages* workflow runs on every push to `main`. When it finishes, the game is at `https://pupi1985.github.io/pixoji/` (the build uses relative URLs, so any repository name works).
 
 Nothing else is needed: no server, no database. Everything the game needs is static files.
 
@@ -182,12 +185,15 @@ To copy every release file except your own levels and presets: `rsync -a --exclu
 - Mouse: left click = bomb, right click = pressed (no bomb), drag to paint.
 - Touch: every tap cycles empty -> bomb -> pressed -> empty; drag to paint.
 - Undo / redo buttons (Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z), Reset asks for confirmation.
-- **Settled clues fade.** When your marks settle a clue - every cell it depends on is marked (bomb or safe) and the marks give exactly the
-  number shown - the clue is drawn faded but readable; it returns to normal as soon as a mark changes and it no longer holds, or when
-  you undo. This covers cell clues (neighbor: its 3x3 block; isolated and surrounded: that block plus the cells next to it; area: its
-  area must be closed in by cells of the other state) and the clues of rows and columns. Chain and multiplier cells have no number and never
-  fade. When a level is cleared, the cells you had not pressed are pressed for you (every cell is marked then), so every clue shows as
-  settled and the board stays that way.
+- **Settled clues fade.** A clue fades (drawn faded but readable) when its number can no longer change whatever you do with the cells
+  still unmarked, and your marks agree with it. It is direct reasoning only: an unmarked cell that cannot influence the clue does not keep
+  it lit. Neighbor: its whole 3x3 block is marked. Isolated and surrounded: each cell of the block is judged on its own (a bomb next to a
+  cell, or the cell being safe, already makes it count 0 for *isolated*; a safe neighbour already makes it count 0 for *surrounded*), so
+  you do not have to mark cells that cannot matter. Area: closed in by cells of the other state. Row/column count: the whole line marked.
+  Longest-run: the unmarked cells cannot make a longer or shorter run than the one fixed. Groups: every way of filling the rest gives the
+  same number. A **multiplier** fades once every clue that uses it has faded (grid numbers whose block holds it, counts and longest-runs
+  of its row and column, areas that include it; groups ignore it). Chains never fade. It returns to normal as soon as a mark changes.
+  When a level is cleared, the cells you had not pressed are pressed for you and every clue shows as settled.
 - **← Menu** leaves the level at once if you have not marked anything (or have undone everything, or the level is cleared); if you have
   marked at least one cell, bomb or safe, it asks first, because those marks would be lost. Marks that a tutorial places as examples do not count.
 

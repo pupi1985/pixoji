@@ -108,7 +108,8 @@ The build refuses a level whose tutorial is malformed and tells you where, for e
 Beyond the syntax, the build also compares the tutorial with the level's real solution and refuses a tutorial that says something false:
 cells marked (or waited for) as bombs must be bombs, cells marked as safe must be safe, cells highlighted with the `bomb` / `safe` style
 must be bombs / safe, and a `play ... "until": "solved"` step must not start on a board that the earlier marks already solved (use
-`"clear": "all"`).
+`"clear": "all"`). A `play` step that is not the last one must not be solvable by its own `until` cells: if marking them solves
+the level, the tutorial would end early and the later steps would never show, so the build refuses it.
 Nothing is published until every level passes. A level's **identity** (completed tick) depends only on its puzzle, so changing the
 tutorial text never resets progress; the edited level reaches devices as a new file the next time they are online.
 

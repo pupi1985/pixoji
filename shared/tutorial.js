@@ -136,6 +136,13 @@ export function checkTutorialAgainstSolution(steps, bombs) {
     for (const m of marksUpTo([step], 0)) { if (m.all) board.fill(0); else board[m.r * width + m.c] = m.state; }
     if (step.kind === 'play' && step.until.mode === 'solved' && solved()) problems.push(`tutorial step ${at}: the marks of the earlier steps already solve the whole level, so there is nothing left to do here: add "mark": { "clear": "all" } to this step`);
     if (untilMet(step, board, width)) problems.push(`tutorial step ${at}.until: the cells it waits for are already marked when the step starts: clear them first ("mark": { "clear": [...] })`);
+    if (step.kind === 'play' && step.until.mode === 'cells' && i < steps.length - 1) {
+      const saved = board.slice();
+      step.until.bombs.forEach(([r, c]) => { board[r * width + c] = 1; });
+      step.until.safe.forEach(([r, c]) => { board[r * width + c] = 2; });
+      if (solved()) problems.push(`tutorial step ${at}: when the player marks the cells this step waits for, the level is solved, which ends the tutorial before its last step: choose other cells for "until" or make it the last step`);
+      board.set(saved);
+    }
     expect(step.mark.bombs, true, `${at} mark.bombs`); expect(step.mark.safe, false, `${at} mark.safe`);
     expect(step.until.bombs, true, `${at} until.bombs`); expect(step.until.safe, false, `${at} until.safe`);
     step.highlight.forEach((item, k) => {

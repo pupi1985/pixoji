@@ -154,7 +154,7 @@ export class GridCell extends Container {
     }
 
     // --- MULTIPLICADOR (TIPO 5): circle with a "2" inside (the "2" is the text node) ---
-    if (this.clueType === 5) drawMultiplierRing(g, s / 2, s / 2, s * 0.30, vectorColor);
+    if (this.clueType === 5) drawMultiplierRing(g, s / 2, s / 2, s * 0.30, ink);
 
     // --- ÁREA CONTIGUA (TIPO 6): paint bucket tipped over, paint flowing out of it ---
     if (this.clueType === 6) drawAreaIcon(g, cx, cy, r, ink, eyeColor);
